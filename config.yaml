@@ -46,6 +46,6 @@ include_patterns: []
 # ביטויים שמסננים החוצה (למשל דיג'יים שמפרסמים את עצמם). ריק = רשימה מובנית.
 exclude_patterns: []
 
-# תיקייה לפרופיל הדפדפן (שומר את ההתחברות לפייסבוק) ולמסד הנתונים
+# תיקייה לפרופיל הדפדפן (שומר את ההתחברות לפייסבוק) ולהיסטוריית השליחות
 browser_profile_dir: ./browser_profile
-database_file: ./dj_agent.db
+history_file: ./history.json
