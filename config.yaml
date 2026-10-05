@@ -10,11 +10,14 @@ mode: auto
 # לטפל רק בפוסטים שהועלו לפני פחות מ-X ימים (פוסט ישן יותר – מדלגים)
 max_post_age_days: 7
 
-# ---- שליחת כל פוסט שנמצא אליך לווצאפ (דרך CallMeBot) ----
-# קבלת apikey: https://www.callmebot.com/blog/free-api-whatsapp-messages/
-# phone = המספר שלך בפורמט בינלאומי, למשל +972501234567
+# ---- שליחת כל פוסט שנמצא אליך לווצאפ ----
+# phone = המספר שלך (למשל 0501234567). ההודעות יישלחו לצ'אט "אני" שלך.
+# method:
+#   web       – דרך ווצאפ ווב באותו דפדפן (בפעם הראשונה סורקים QR). מומלץ.
+#   callmebot – דרך שירות CallMeBot (צריך apikey: https://www.callmebot.com/blog/free-api-whatsapp-messages/)
 whatsapp:
   enabled: true
+  method: web
   phone: ""
   apikey: ""
 

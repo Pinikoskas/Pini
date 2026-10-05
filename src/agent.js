@@ -17,6 +17,7 @@ const { PostMatcher } = require('./matcher');
 const { parsePostAge, describeAge, DAY } = require('./postAge');
 const { Storage } = require('./storage');
 const { formatPostMessage, sendWhatsApp, checkWhatsAppSettings } = require('./whatsapp');
+const { WhatsAppWeb } = require('./whatsappWeb');
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
 
@@ -161,7 +162,19 @@ class DJAgent {
     this.quit = false;
   }
 
-  async run() {
+  async setupNotifier(context) {
+    if ((this.whatsapp.method || 'web') === 'callmebot') {
+      this.notify = (text) => sendWhatsApp(this.whatsapp, text);
+      return;
+    }
+    log('פותח ווצאפ ווב...');
+    const wa = new WhatsAppWeb(context, this.whatsapp.phone, { log });
+    await wa.ensureReady();
+    log('ווצאפ ווב מחובר ✔');
+    this.notify = (text) => wa.send(text);
+  }
+
+  async run({ testWhatsappOnly = false } = {}) {
     const context = await chromium.launchPersistentContext(this.cfg.browser_profile_dir, {
       headless: false,
       locale: 'he-IL',
@@ -170,6 +183,13 @@ class DJAgent {
     });
     const page = context.pages()[0] || (await context.newPage());
     try {
+      if (this.whatsapp && (this.mode !== 'dry_run' || testWhatsappOnly)) await this.setupNotifier(context);
+      if (testWhatsappOnly) {
+        await this.notify("✅ בדיקה: סוכן הדיג'יי מחובר לווצאפ שלך");
+        log('הודעת בדיקה נשלחה לווצאפ ✔');
+        return;
+      }
+      await page.bringToFront();
       await this.ensureLoggedIn(page);
       const everyMinutes = Number(this.cfg.run_every_minutes || 0);
       for (;;) {
@@ -327,13 +347,14 @@ class DJAgent {
         log('   [dry_run] היה נשלח אליך לווצאפ');
       } else {
         try {
-          await sendWhatsApp(this.whatsapp, formatPostMessage(post, ageDesc));
+          await this.notify(formatPostMessage(post, ageDesc));
           this.notificationsSent++;
           this.storage.record(post.key, post.authorUrl, 'notify', post.text);
           log('   ✔ נשלח אליך לווצאפ');
         } catch (e) {
-          log(`   ✘ שליחה לווצאפ נכשלה: ${e.message}`);
+          log(`   ✘ שליחה לווצאפ נכשלה: ${e.message.split('\n')[0]}`);
         }
+        await page.bringToFront();
       }
     }
     if (!this.cfg.send_comment && !this.cfg.send_messenger) return;
@@ -517,14 +538,12 @@ async function main() {
   const mode = args.mode || cfg.mode || 'confirm';
   const problem = checkWhatsAppSettings(cfg.whatsapp);
   if (problem) throw new Error(problem);
-  if (args.testWhatsapp) {
-    await sendWhatsApp(cfg.whatsapp || {}, "✅ בדיקה: סוכן הדיג'יי מחובר לווצאפ שלך");
-    console.log('הודעת בדיקה נשלחה לווצאפ ✔');
-    return;
+  if (args.testWhatsapp && !(cfg.whatsapp && cfg.whatsapp.enabled)) {
+    throw new Error('ווצאפ כבוי ב-config.yaml (whatsapp.enabled)');
   }
   logStream = fs.createWriteStream(path.resolve(path.dirname(path.resolve(args.config)), 'dj_agent.log'), { flags: 'a' });
   log(`מצב עבודה: ${mode} | גיל פוסט מקסימלי: ${cfg.max_post_age_days ?? 7} ימים`);
-  await new DJAgent(cfg, mode).run();
+  await new DJAgent(cfg, mode).run({ testWhatsappOnly: !!args.testWhatsapp });
 }
 
 module.exports = { main, fillTemplate, canonicalPostUrl, canonicalProfileUrl, numericUserId, jsNewPosts, jsPostInfo, DJAgent, POST_SELECTOR };

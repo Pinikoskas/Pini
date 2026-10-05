@@ -35,7 +35,8 @@ async function sendWhatsApp(settings, text) {
 
 function checkWhatsAppSettings(settings) {
   if (!settings || !settings.enabled) return null;
-  if (!settings.phone || !settings.apikey) {
+  if (!settings.phone) return 'חסר מספר טלפון ב-config.yaml (whatsapp.phone).';
+  if ((settings.method || 'web') === 'callmebot' && !settings.apikey) {
     return (
       'חסרים פרטי ווצאפ ב-config.yaml (whatsapp.phone / whatsapp.apikey).\n' +
       'הוראות קבלת apikey: https://www.callmebot.com/blog/free-api-whatsapp-messages/'

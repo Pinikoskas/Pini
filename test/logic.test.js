@@ -129,7 +129,16 @@ test('whatsapp settings check', () => {
   assert.equal(checkWhatsAppSettings(undefined), null);
   assert.equal(checkWhatsAppSettings({ enabled: false }), null);
   assert.ok(checkWhatsAppSettings({ enabled: true, phone: '', apikey: '' }));
-  assert.equal(checkWhatsAppSettings({ enabled: true, phone: '+972501234567', apikey: '123' }), null);
+  assert.equal(checkWhatsAppSettings({ enabled: true, phone: '0501234567' }), null); // web: no apikey needed
+  assert.ok(checkWhatsAppSettings({ enabled: true, method: 'callmebot', phone: '0501234567', apikey: '' }));
+  assert.equal(checkWhatsAppSettings({ enabled: true, method: 'callmebot', phone: '+972501234567', apikey: '123' }), null);
+});
+
+test('whatsapp web phone normalization', () => {
+  const { normalizePhone } = require('../src/whatsappWeb');
+  assert.equal(normalizePhone('050-123 4567'), '972501234567');
+  assert.equal(normalizePhone('+972 50 123 4567'), '972501234567');
+  assert.equal(normalizePhone('00972501234567'), '972501234567');
 });
 
 test('whatsapp request url and error detection', async () => {
