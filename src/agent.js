@@ -16,6 +16,7 @@ const { chromium } = require('playwright');
 const { PostMatcher } = require('./matcher');
 const { parsePostAge, describeAge, DAY } = require('./postAge');
 const { Storage } = require('./storage');
+const { formatPostMessage, sendWhatsApp, checkWhatsAppSettings } = require('./whatsapp');
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
 
@@ -154,6 +155,8 @@ class DJAgent {
     this.maxAgeMs = Number(cfg.max_post_age_days ?? 7) * DAY;
     this.commentsSent = 0;
     this.messagesSent = 0;
+    this.notificationsSent = 0;
+    this.whatsapp = cfg.whatsapp && cfg.whatsapp.enabled ? cfg.whatsapp : null;
     this.seenThisRun = new Set();
     this.quit = false;
   }
@@ -168,12 +171,18 @@ class DJAgent {
     const page = context.pages()[0] || (await context.newPage());
     try {
       await this.ensureLoggedIn(page);
-      for (const source of this.cfg.sources || ['https://www.facebook.com/']) {
-        if (this.quit || this.limitsReached()) break;
-        await this.scanSource(context, page, source);
+      const everyMinutes = Number(this.cfg.run_every_minutes || 0);
+      for (;;) {
+        for (const source of this.cfg.sources || ['https://www.facebook.com/']) {
+          if (this.quit || this.limitsReached()) break;
+          await this.scanSource(context, page, source);
+        }
+        if (this.quit || !everyMinutes) break;
+        log(`סבב הסתיים. נשלחו לווצאפ עד עכשיו: ${this.notificationsSent}. סבב הבא בעוד ${everyMinutes} דקות (Ctrl+C לעצירה)`);
+        await sleep(everyMinutes * 60 * 1000);
       }
     } finally {
-      log(`סיום. תגובות שנשלחו: ${this.commentsSent}, הודעות שנשלחו: ${this.messagesSent}`);
+      log(`סיום. ווצאפ: ${this.notificationsSent}, תגובות: ${this.commentsSent}, הודעות מסנג'ר: ${this.messagesSent}`);
       await context.close();
     }
   }
@@ -200,7 +209,7 @@ class DJAgent {
   }
 
   limitsReached() {
-    if (this.mode === 'dry_run') return false;
+    if (this.mode === 'dry_run' || this.whatsapp) return false;
     const commentsDone = !this.cfg.send_comment || this.commentsSent >= this.cfg.max_comments_per_run;
     const messagesDone = !this.cfg.send_messenger || this.messagesSent >= this.cfg.max_messages_per_run;
     return commentsDone && messagesDone;
@@ -310,7 +319,24 @@ class DJAgent {
       return;
     }
 
-    this.printPost(post, matched, `${post.ageText} (~${describeAge(age)})`);
+    const ageDesc = `${post.ageText} (~${describeAge(age)})`;
+    this.printPost(post, matched, ageDesc);
+
+    if (this.whatsapp) {
+      if (this.mode === 'dry_run') {
+        log('   [dry_run] היה נשלח אליך לווצאפ');
+      } else {
+        try {
+          await sendWhatsApp(this.whatsapp, formatPostMessage(post, ageDesc));
+          this.notificationsSent++;
+          this.storage.record(post.key, post.authorUrl, 'notify', post.text);
+          log('   ✔ נשלח אליך לווצאפ');
+        } catch (e) {
+          log(`   ✘ שליחה לווצאפ נכשלה: ${e.message}`);
+        }
+      }
+    }
+    if (!this.cfg.send_comment && !this.cfg.send_messenger) return;
 
     let doComment = !!this.cfg.send_comment && this.commentsSent < this.cfg.max_comments_per_run;
     let doMessage =
@@ -477,6 +503,7 @@ function parseArgs(argv) {
     if (argv[i] === '--config') args.config = argv[++i];
     else if (argv[i] === '--mode') args.mode = argv[++i];
     else if (argv[i].startsWith('--mode=')) args.mode = argv[i].slice(7);
+    else if (argv[i] === '--test-whatsapp') args.testWhatsapp = true;
   }
   if (args.mode && !['dry_run', 'confirm', 'auto'].includes(args.mode)) {
     throw new Error(`mode לא חוקי: ${args.mode} (אפשר: dry_run / confirm / auto)`);
@@ -488,6 +515,13 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const cfg = loadConfig(args.config);
   const mode = args.mode || cfg.mode || 'confirm';
+  const problem = checkWhatsAppSettings(cfg.whatsapp);
+  if (problem) throw new Error(problem);
+  if (args.testWhatsapp) {
+    await sendWhatsApp(cfg.whatsapp || {}, "✅ בדיקה: סוכן הדיג'יי מחובר לווצאפ שלך");
+    console.log('הודעת בדיקה נשלחה לווצאפ ✔');
+    return;
+  }
   logStream = fs.createWriteStream(path.resolve(path.dirname(path.resolve(args.config)), 'dj_agent.log'), { flags: 'a' });
   log(`מצב עבודה: ${mode} | גיל פוסט מקסימלי: ${cfg.max_post_age_days ?? 7} ימים`);
   await new DJAgent(cfg, mode).run();

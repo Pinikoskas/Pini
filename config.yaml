@@ -5,14 +5,26 @@
 #   dry_run  – רק מחפש ומדפיס אילו פוסטים מצא, לא שולח כלום (מומלץ להתחיל כך)
 #   confirm  – לפני כל פוסט שואל אותך בטרמינל אם לשלוח (y/n)
 #   auto     – שולח לבד, בלי לשאול
-mode: confirm
+mode: auto
 
-# להגיב רק על פוסטים שהועלו לפני פחות מ-X ימים (פוסט ישן יותר – מדלגים)
+# לטפל רק בפוסטים שהועלו לפני פחות מ-X ימים (פוסט ישן יותר – מדלגים)
 max_post_age_days: 7
 
-# מה לעשות על כל פוסט מתאים
-send_comment: true
-send_messenger: true
+# ---- שליחת כל פוסט שנמצא אליך לווצאפ (דרך CallMeBot) ----
+# קבלת apikey: https://www.callmebot.com/blog/free-api-whatsapp-messages/
+# phone = המספר שלך בפורמט בינלאומי, למשל +972501234567
+whatsapp:
+  enabled: true
+  phone: ""
+  apikey: ""
+
+# לחזור על הסריקה כל X דקות (0 = לסרוק פעם אחת ולצאת)
+run_every_minutes: 60
+
+# פעולות בפייסבוק עצמו (כבוי – כדי לא להסתכן בחסימה).
+# true = הסוכן גם יגיב על הפוסט / ישלח הודעה במסנג'ר לכותב.
+send_comment: false
+send_messenger: false
 
 # הודעות. {name} יוחלף בשם הפרטי של כותב הפוסט (אם זוהה).
 comment_text: |

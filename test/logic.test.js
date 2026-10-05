@@ -111,3 +111,41 @@ test('message template', () => {
   assert.equal(fillTemplate('היי {name}! מה נשמע', 'דנה לוי'), 'היי דנה! מה נשמע');
   assert.equal(fillTemplate('היי {name}! מה נשמע', ''), 'היי! מה נשמע');
 });
+
+const { formatPostMessage, checkWhatsAppSettings, sendWhatsApp } = require('../src/whatsapp');
+
+test('whatsapp message format', () => {
+  const msg = formatPostMessage(
+    { authorName: 'דנה לוי', text: "מחפשת דיג'יי\nלחתונה", url: 'https://www.facebook.com/groups/1/posts/2', authorUrl: '' },
+    "2 י' (~2 ימים)",
+  );
+  assert.match(msg, /דנה לוי/);
+  assert.match(msg, /מחפשת דיג'יי לחתונה/);
+  assert.match(msg, /groups\/1\/posts\/2/);
+  assert.doesNotMatch(msg, /פרופיל/);
+});
+
+test('whatsapp settings check', () => {
+  assert.equal(checkWhatsAppSettings(undefined), null);
+  assert.equal(checkWhatsAppSettings({ enabled: false }), null);
+  assert.ok(checkWhatsAppSettings({ enabled: true, phone: '', apikey: '' }));
+  assert.equal(checkWhatsAppSettings({ enabled: true, phone: '+972501234567', apikey: '123' }), null);
+});
+
+test('whatsapp request url and error detection', async () => {
+  const realFetch = global.fetch;
+  let calledUrl = '';
+  try {
+    global.fetch = async (url) => { calledUrl = url; return { ok: true, status: 200, text: async () => '<p>Message queued</p>' }; };
+    await sendWhatsApp({ phone: '+972 50-123-4567', apikey: '999' }, 'שלום');
+    const u = new URL(calledUrl);
+    assert.equal(u.searchParams.get('phone'), '+972501234567');
+    assert.equal(u.searchParams.get('apikey'), '999');
+    assert.equal(u.searchParams.get('text'), 'שלום');
+
+    global.fetch = async () => ({ ok: true, status: 200, text: async () => 'APIKey is invalid' });
+    await assert.rejects(sendWhatsApp({ phone: '1', apikey: 'x' }, 'hi'));
+  } finally {
+    global.fetch = realFetch;
+  }
+});
