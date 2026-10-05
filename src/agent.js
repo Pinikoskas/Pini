@@ -65,9 +65,19 @@ function jsPostInfo(el) {
     stamps.push({ href: a.href, label: a.getAttribute('aria-label') || '', text: (a.innerText || '').trim() });
     if (i >= 6) break;
   }
+  // Post text without the comments under it (comments are nested role="article" elements).
+  const root = el.matches('[role="article"]') ? el : el.querySelector('[role="article"]') || el;
+  const parts = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const owner = n.parentElement && n.parentElement.closest('[role="article"]');
+    if (owner && owner !== root) continue;
+    const t = n.textContent.trim();
+    if (t) parts.push(t);
+  }
   return {
     body: body ? body.innerText : '',
-    full: el.innerText || '',
+    full: parts.join(' ') || el.innerText || '',
     authorName: authorA ? authorA.innerText.trim() : '',
     authorHref: authorA ? authorA.href : '',
     stamps,

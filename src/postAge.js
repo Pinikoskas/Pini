@@ -60,7 +60,7 @@ function normalize(text) {
     .trim()
     .toLowerCase()
     .replace(/[׳’`´]/g, "'")                                  // geresh variants
-    .replace(/[‎‏‪-‮⁦-⁩]/g, '') // direction marks
+    .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '') // direction marks
     .replace(/\s+/g, ' ')
     .replace(/^לפני\s+/, '')                                  // "לפני 3 שעות"
     .replace(/\s+ago$/, '')                                   // "3 hours ago"

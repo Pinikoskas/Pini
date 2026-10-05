@@ -17,13 +17,17 @@ const DEFAULT_EXCLUDE = [
   String.raw`אני\s+` + DJ_WORD,
   String.raw`(?:פנוי|פנויה|זמין|זמינה)\s+ל(?:אירועים|תאריכים)`,
   String.raw`מחפש(?:ת)?\s+(?:עבודה|אירועים|הופעות|לקוחות)`,
+  // Students looking for a DJ teacher / course: "מחפש מורה ל-DJ", "שיעורי DJ"
+  String.raw`(?:מורה|מורים|שיעור|שיעורי|קורס|קורסים|ללמוד|לימודי)\s*(?:ל-?|ב-?)?\s*` + DJ_WORD,
+  // Buying / selling equipment: "מחפש לקנות עמדת DJ", "מוכר ציוד DJ"
+  String.raw`(?:לקנות|קונה|למכור|מוכר|מוכרת|עמדת|עמדה|ציוד|קונטרולר|controller|מיקסר)[^\n.!?]{0,15}` + DJ_WORD,
 ];
 
 function normalize(text) {
   return text
     .toLowerCase()
     .replace(/[׳’`´"״]/g, "'")
-    .replace(/[‎‏‪-‮⁦-⁩]/g, '')
+    .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '')
     .replace(/[ \t]+/g, ' ');
 }
 

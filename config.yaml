@@ -27,9 +27,9 @@ messenger_text: |
 # אפשר להוסיף קבוצות, למשל: https://www.facebook.com/groups/123456789
 sources:
   - https://www.facebook.com/
-  # חיפוש בכל פייסבוק אחרי פוסטים (הסר את ה-# כדי להפעיל):
-  # - https://www.facebook.com/search/posts?q=מחפש%20דיג'יי
-  # - https://www.facebook.com/search/posts?q=צריך%20DJ
+  # חיפוש בכל פייסבוק אחרי פוסטים:
+  - https://www.facebook.com/search/posts?q=מחפש%20דיג'יי
+  - https://www.facebook.com/search/posts?q=צריך%20DJ
 
 # כמה פעמים לגלול בכל עמוד
 max_scrolls_per_source: 40
