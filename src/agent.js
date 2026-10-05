@@ -203,8 +203,11 @@ class DJAgent {
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await sleep(4000);
     const scrolls = Number(this.cfg.max_scrolls_per_source ?? 40);
+    let totalPosts = 0;
     for (let s = 0; s < scrolls; s++) {
       const ids = await page.evaluate(jsNewPosts, POST_SELECTOR);
+      totalPosts += ids.length;
+      if ((s + 1) % 10 === 0) log(`   גלילה ${s + 1}/${scrolls} – נסרקו ${totalPosts} פוסטים`);
       for (const id of ids) {
         if (this.quit || this.limitsReached()) return;
         try {
@@ -270,9 +273,11 @@ class DJAgent {
   }
 
   async handlePost(context, page, el) {
-    await el.scrollIntoViewIfNeeded({ timeout: 5000 });
-    const quickText = await el.innerText({ timeout: 5000 });
-    if (!this.matcher.mightMatch(quickText)) return;
+    // Facebook removes/hides posts that scrolled far away, so read the text straight from
+    // the DOM (no visibility needed) and skip posts that are already gone.
+    if ((await el.count()) === 0) return;
+    const quickText = await el.evaluate((e) => (e.isConnected ? e.innerText : null), null, { timeout: 2000 }).catch(() => null);
+    if (!quickText || !this.matcher.mightMatch(quickText)) return;
 
     const post = await this.readPost(page, el);
     const matched = this.matcher.match(post.text);
@@ -380,7 +385,8 @@ class DJAgent {
     const text = fillTemplate(this.cfg.comment_text, post.authorName);
     const el = post.locator;
     try {
-      await el.scrollIntoViewIfNeeded({ timeout: 5000 });
+      await el.evaluate((e) => e.scrollIntoView({ block: 'center' }), null, { timeout: 3000 });
+      await sleep(1000);
       let box = el.locator('div[role="textbox"][contenteditable="true"]').first();
       let openedDialog = false;
       if (!(await box.isVisible())) {
