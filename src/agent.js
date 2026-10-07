@@ -210,6 +210,8 @@ class DJAgent {
       viewport: { width: 1280, height: 900 },
       args: ['--disable-blink-features=AutomationControlled'],
     });
+    let browserClosed = false;
+    context.on('close', () => (browserClosed = true));
     const page = context.pages()[0] || (await context.newPage());
     try {
       if (importGroupsOnly) {
@@ -231,15 +233,24 @@ class DJAgent {
       const everyMinutes = Number(this.cfg.run_every_minutes || 0);
       for (;;) {
         for (const source of buildSources(this.cfg)) {
-          await this.scanSource(page, source);
+          try {
+            await this.scanSource(page, source);
+          } catch (e) {
+            if (browserClosed || page.isClosed()) throw e;
+            // One page that fails to load must not stop the whole round.
+            log(`   ✘ שגיאה בסריקת ${source.label}, ממשיך לעמוד הבא: ${e.message.split('\n')[0]}`);
+          }
         }
         if (!everyMinutes) break;
         log(`סבב הסתיים. נשלחו לווצאפ עד עכשיו: ${this.notificationsSent}. סבב הבא בעוד ${everyMinutes} דקות (Ctrl+C לעצירה)`);
         await sleep(everyMinutes * 60 * 1000);
       }
+    } catch (e) {
+      if (!browserClosed && !page.isClosed()) throw e;
+      log('חלון הדפדפן נסגר – הסוכן נעצר.');
     } finally {
       log(`סיום. נשלחו לווצאפ: ${this.notificationsSent}`);
-      await context.close();
+      await context.close().catch(() => {});
     }
   }
 
