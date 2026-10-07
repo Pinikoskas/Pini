@@ -17,6 +17,7 @@ const { formatPostMessage, checkWhatsAppSettings } = require('./whatsapp');
 const { WhatsAppWeb } = require('./whatsappWeb');
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
+const OLD_POSTS_TO_STOP = 3;
 
 // ---------- browser-side helpers (run inside the Facebook page) ----------
 
@@ -83,6 +84,43 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const rand = (min, max) => min + Math.random() * (max - min);
 const randInt = (min, max) => Math.floor(rand(min, max + 1));
 const humanSleep = ([min, max]) => sleep(rand(min, max) * 1000);
+
+// Facebook's "Recent posts" search filter (newest first).
+const RECENT_POSTS_FILTER = Buffer.from(
+  JSON.stringify({ 'recent_posts:0': JSON.stringify({ name: 'recent_posts', args: '' }) }),
+).toString('base64');
+
+function searchUrl(query) {
+  return `https://www.facebook.com/search/posts?q=${encodeURIComponent(query)}&filters=${encodeURIComponent(RECENT_POSTS_FILTER)}`;
+}
+
+function groupUrl(url) {
+  const u = new URL(url);
+  u.searchParams.set('sorting_setting', 'CHRONOLOGICAL'); // newest posts first
+  return u.toString();
+}
+
+/**
+ * The pages to scan, in order:
+ *  - the feed: a fixed number of scrolls (it never ends and isn't sorted by time);
+ *  - searches and groups: sorted newest first, scrolled until posts get older than
+ *    max_post_age_days (or the results run out).
+ */
+function buildSources(cfg) {
+  const sources = [];
+  const feedScrolls = Number(cfg.feed_scrolls ?? 40);
+  if (feedScrolls > 0) {
+    sources.push({ label: 'פיד ראשי', url: 'https://www.facebook.com/', maxScrolls: feedScrolls, untilOld: false });
+  }
+  const cap = Number(cfg.max_scrolls_per_search ?? 100);
+  for (const q of cfg.searches || []) {
+    sources.push({ label: `חיפוש "${q}"`, url: searchUrl(q), maxScrolls: cap, untilOld: true });
+  }
+  for (const g of cfg.groups || []) {
+    sources.push({ label: `קבוצה ${g}`, url: groupUrl(g), maxScrolls: cap, untilOld: true });
+  }
+  return sources;
+}
 
 function canonicalPostUrl(href) {
   const u = new URL(href);
@@ -157,7 +195,7 @@ class DJAgent {
       await this.ensureLoggedIn(page);
       const everyMinutes = Number(this.cfg.run_every_minutes || 0);
       for (;;) {
-        for (const source of this.cfg.sources || ['https://www.facebook.com/']) {
+        for (const source of buildSources(this.cfg)) {
           await this.scanSource(page, source);
         }
         if (!everyMinutes) break;
@@ -193,23 +231,37 @@ class DJAgent {
 
   // ---------- scanning ----------
 
-  async scanSource(page, url) {
-    log(`סורק: ${url}`);
+  async scanSource(page, { label, url, maxScrolls, untilOld }) {
+    log(`סורק: ${label}`);
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await sleep(4000);
-    const scrolls = Number(this.cfg.max_scrolls_per_source ?? 40);
     let totalPosts = 0;
-    for (let s = 0; s < scrolls; s++) {
+    let oldInARow = 0; // untilOld: consecutive posts older than the limit
+    let emptyScrolls = 0; // scrolls that brought no new posts
+    for (let s = 0; s < maxScrolls; s++) {
       const ids = await page.evaluate(jsNewPosts, POST_SELECTOR);
       totalPosts += ids.length;
-      if ((s + 1) % 10 === 0) log(`   גלילה ${s + 1}/${scrolls} – נסרקו ${totalPosts} פוסטים`);
+      emptyScrolls = ids.length ? 0 : emptyScrolls + 1;
+      if ((s + 1) % 10 === 0) log(`   גלילה ${s + 1} – נסרקו ${totalPosts} פוסטים`);
       for (const id of ids) {
+        let age = null;
         try {
-          await this.handlePost(page, page.locator(`[data-djbot-id="${id}"]`));
+          age = await this.handlePost(page, page.locator(`[data-djbot-id="${id}"]`), { alwaysReadAge: untilOld });
         } catch (e) {
           // One broken post must not stop the run.
           log(`שגיאה בטיפול בפוסט: ${e.message.split('\n')[0]}`);
         }
+        if (!untilOld || age === null) continue;
+        oldInARow = age > this.maxAgeMs ? oldInARow + 1 : 0;
+        // A single older post can slip in between new ones, so wait for a few in a row.
+        if (oldInARow >= OLD_POSTS_TO_STOP) {
+          log(`   הגענו לפוסטים ישנים מ-${this.cfg.max_post_age_days ?? 3} ימים – עוצר את העמוד הזה (${totalPosts} פוסטים)`);
+          return;
+        }
+      }
+      if (untilOld && emptyScrolls >= 5) {
+        log(`   אין עוד תוצאות – עוצר את העמוד הזה (${totalPosts} פוסטים)`);
+        return;
       }
       await page.mouse.wheel(0, randInt(700, 1300));
       await humanSleep(this.cfg.delay_between_scrolls || [3, 7]);
@@ -265,32 +317,39 @@ class DJAgent {
     }
   }
 
-  async handlePost(page, el) {
+  /**
+   * Checks one post and sends it to WhatsApp if it's a recent DJ request.
+   * Returns the post's age in ms when it was read (null otherwise). With alwaysReadAge,
+   * the age is read even for posts that don't mention a DJ (used to know when to stop).
+   */
+  async handlePost(page, el, { alwaysReadAge = false } = {}) {
     // Facebook removes/hides posts that scrolled far away, so read the text straight from
     // the DOM (no visibility needed) and skip posts that are already gone.
-    if ((await el.count()) === 0) return;
+    if ((await el.count()) === 0) return null;
     const quickText = await el.evaluate((e) => (e.isConnected ? e.innerText : null), null, { timeout: 2000 }).catch(() => null);
-    if (!quickText || !this.matcher.mightMatch(quickText)) return;
+    if (!quickText) return null;
+    const maybeDj = this.matcher.mightMatch(quickText);
+    if (!maybeDj && !alwaysReadAge) return null;
 
     const post = await this.readPost(page, el);
-    const matched = this.matcher.match(post.text);
-    if (!matched) return;
-    if (this.seenThisRun.has(post.key)) return;
+    const age = parsePostAge(post.ageText);
+    const matched = maybeDj && this.matcher.match(post.text);
+    if (!matched) return age;
+    if (this.seenThisRun.has(post.key)) return age;
     this.seenThisRun.add(post.key);
 
     const who = post.authorName || '?';
-    const age = parsePostAge(post.ageText);
     if (age === null) {
       log(`⏭  דילוג – לא הצלחתי לזהות מתי הפוסט עלה (${who})`);
-      return;
+      return age;
     }
     if (age > this.maxAgeMs) {
       log(`⏭  דילוג – פוסט ישן (${post.ageText}): ${who}`);
-      return;
+      return age;
     }
     if (this.storage.postHandled(post.key)) {
       log(`⏭  דילוג – כבר טיפלנו בפוסט הזה: ${who}`);
-      return;
+      return age;
     }
 
     const ageDesc = `${post.ageText} (~${describeAge(age)})`;
@@ -298,7 +357,7 @@ class DJAgent {
 
     if (this.dryRun) {
       log('   [בדיקה] היה נשלח אליך לווצאפ');
-      return;
+      return age;
     }
     try {
       await this.notify(formatPostMessage(post, ageDesc));
@@ -309,6 +368,7 @@ class DJAgent {
       log(`   ✘ שליחה לווצאפ נכשלה: ${e.message.split('\n')[0]}`);
     }
     await page.bringToFront();
+    return age;
   }
 
   printPost(post, matched, ageDesc) {
@@ -355,4 +415,4 @@ async function main() {
   await new DJAgent(cfg, { dryRun: args.dryRun }).run({ testWhatsappOnly: args.testWhatsapp });
 }
 
-module.exports = { main, canonicalPostUrl, canonicalProfileUrl, jsNewPosts, jsPostInfo, DJAgent, POST_SELECTOR };
+module.exports = { main, canonicalPostUrl, canonicalProfileUrl, buildSources, searchUrl, groupUrl, jsNewPosts, jsPostInfo, DJAgent, POST_SELECTOR };

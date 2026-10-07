@@ -135,3 +135,24 @@ test('whatsapp web phone normalization', () => {
   assert.equal(normalizePhone('00972501234567'), '972501234567');
 });
 
+
+test('sources: feed by scroll count, searches and groups newest-first until old', () => {
+  const { buildSources, searchUrl, groupUrl } = require('../src/agent');
+  const s = buildSources({ searches: ["מחפש דיג'יי", 'צריך DJ'], groups: ['https://www.facebook.com/groups/123/'] });
+  assert.deepEqual(
+    s.map((x) => [x.label, x.maxScrolls, x.untilOld]),
+    [
+      ['פיד ראשי', 40, false],
+      ['חיפוש "מחפש דיג\'יי"', 100, true],
+      ['חיפוש "צריך DJ"', 100, true],
+      ['קבוצה https://www.facebook.com/groups/123/', 100, true],
+    ],
+  );
+  const u = new URL(searchUrl('צריך DJ'));
+  assert.equal(u.pathname, '/search/posts');
+  assert.equal(u.searchParams.get('q'), 'צריך DJ');
+  const filters = JSON.parse(Buffer.from(u.searchParams.get('filters'), 'base64').toString());
+  assert.equal(JSON.parse(filters['recent_posts:0']).name, 'recent_posts');
+  assert.equal(new URL(groupUrl('https://www.facebook.com/groups/123/')).searchParams.get('sorting_setting'), 'CHRONOLOGICAL');
+  assert.equal(buildSources({ feed_scrolls: 0 }).length, 0);
+});
