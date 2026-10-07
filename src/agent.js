@@ -19,6 +19,8 @@ const { loadGroupsFile, addGroupsToFile, collectJoinedGroups, groupKey, GroupsLa
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
 const OLD_POSTS_TO_STOP = 3;
+// The search-filter switch that sorts results newest first.
+const RECENT_POSTS_LABEL = /^\s*(recent posts|פוסטים אחרונים|הפוסטים האחרונים|פוסטים מהזמן האחרון|פוסטים חדשים)\s*$/i;
 
 // ---------- browser-side helpers (run inside the Facebook page) ----------
 
@@ -48,7 +50,10 @@ function jsExpandSeeMore(el) {
 
 function jsPostInfo(el) {
   const body = el.querySelector('[data-ad-preview="message"], [data-ad-comet-preview="message"]');
-  const authorA = el.querySelector('h2 a[href], h3 a[href], h4 a[href], strong a[href]');
+  // In group posts the header starts with a link to the group itself; the author comes after it.
+  const isGroupLink = (a) => /facebook\.com\/groups\/[^/?#]+\/?(?:[?#]|$)/.test(a.href);
+  const headerLinks = [...el.querySelectorAll('h2 a[href], h3 a[href], h4 a[href], strong a[href]')];
+  const authorA = headerLinks.find((a) => !isGroupLink(a) && a.innerText.trim()) || headerLinks[0];
   const tsRe = /\/posts\/|\/permalink|story_fbid|\/videos\/|\/photo|\/reel\/|multi_permalinks|pfbid/;
   const stamps = [];
   let i = 0;
@@ -116,7 +121,7 @@ function buildSources(cfg) {
   }
   const cap = Number(cfg.max_scrolls_per_search ?? 100);
   for (const q of cfg.searches || []) {
-    sources.push({ label: `חיפוש "${q}"`, url: searchUrl(q), maxScrolls: cap, untilOld: true });
+    sources.push({ label: `חיפוש "${q}"`, url: searchUrl(q), maxScrolls: cap, untilOld: true, isSearch: true });
   }
   const seen = new Set();
   for (const g of [...(cfg.groups || []).map((url) => ({ url, name: '' })), ...loadGroupsFile(cfg.groups_file)]) {
@@ -251,6 +256,12 @@ class DJAgent {
     log(`סורק: ${source.label}`);
     await page.goto(source.url, { waitUntil: 'domcontentloaded' });
     await sleep(4000);
+    if (source.isSearch && !(await this.ensureRecentPostsFilter(page))) {
+      // Unsorted results mix old and new posts, so "stop at old posts" would stop far too early.
+      const scrolls = Number(this.cfg.search_scrolls_without_filter ?? 20);
+      log(`   ⚠ לא הצלחתי להפעיל "פוסטים אחרונים" – סורק את החיפוש ${scrolls} גלילות בלי לעצור בפוסטים ישנים`);
+      source = { ...source, untilOld: false, maxScrolls: scrolls };
+    }
     const failuresBefore = this.sendFailures;
     const newest = await this.scrollAndCheck(page, source);
     // Remember the newest post of the group for next time – unless this is a test run or a
@@ -258,6 +269,54 @@ class DJAgent {
     if (source.groupId && newest && !this.dryRun && this.sendFailures === failuresBefore) {
       this.lastSeen.save(source.groupId, source.groupName, newest.key);
     }
+  }
+
+  /**
+   * Turns on the "Recent posts" switch in the search filters (newest first).
+   * Returns true when it is on. If it can't be found, logs the switches that are there.
+   */
+  async ensureRecentPostsFilter(page) {
+    const isOn = async (el) =>
+      (await el.getAttribute('aria-checked').catch(() => null)) === 'true' || (await el.isChecked().catch(() => false));
+    // The real switch is often a visually hidden input under a styled element, so don't
+    // require it to be visible.
+    const find = async () => {
+      for (const role of ['switch', 'checkbox']) {
+        const el = page.getByRole(role, { name: RECENT_POSTS_LABEL, includeHidden: true }).first();
+        if (await el.count()) return el;
+      }
+      return null;
+    };
+    const press = async (el) => {
+      await el.click({ force: true, timeout: 3000 }).catch(() => el.evaluate((e) => e.click()).catch(() => {}));
+      await sleep(4000); // results reload
+    };
+
+    let toggle = await find();
+    if (!toggle) {
+      const label = page.getByText(RECENT_POSTS_LABEL).first();
+      if (!(await label.count())) {
+        const seen = await page
+          .evaluate(() =>
+            [...document.querySelectorAll('[role="switch"], [role="checkbox"], input[type="checkbox"]')]
+              .map((e) => e.getAttribute('aria-label') || (e.closest('label') || e.parentElement || e).innerText || '')
+              .map((t) => t.trim().split('\n')[0])
+              .filter(Boolean),
+          )
+          .catch(() => []);
+        log(`   לא מצאתי את המתג "פוסטים אחרונים". מתגים בעמוד: ${seen.length ? seen.join(' | ') : 'אין'}`);
+        return false;
+      }
+      // Only a text label, no switch element: clicking it is the best we can do.
+      await press(label);
+      log('   "פוסטים אחרונים" נלחץ (לא הצלחתי לאמת שהוא פעיל)');
+      return true;
+    }
+    if (await isOn(toggle)) return true;
+    await press(toggle);
+    const on = await isOn((await find()) || toggle);
+    log(on ? '   ✔ הופעל סינון "פוסטים אחרונים"' : '   המתג "פוסטים אחרונים" לא נדלק');
+    return on;
   }
 
   /** Scrolls one page and checks its posts. Returns the newest post read ({ age, key }) or null. */
