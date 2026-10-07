@@ -6,6 +6,7 @@ function formatPostMessage(post, ageDesc) {
   const lines = [
     "🎧 *נמצא פוסט: מחפשים דיג'יי!*",
     `👤 ${post.authorName || 'לא ידוע'}`,
+    ...(post.groupName ? [`👥 בקבוצה: ${post.groupName}`] : []),
     `🕒 עלה: ${ageDesc}`,
     '',
     `📝 ${preview}`,

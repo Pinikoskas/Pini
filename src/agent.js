@@ -50,11 +50,24 @@ function jsExpandSeeMore(el) {
 
 function jsPostInfo(el) {
   const body = el.querySelector('[data-ad-preview="message"], [data-ad-comet-preview="message"]');
-  // In group posts the header starts with a link to the group itself; the author comes after it.
-  const isGroupLink = (a) => /facebook\.com\/groups\/[^/?#]+\/?(?:[?#]|$)/.test(a.href);
-  const headerLinks = [...el.querySelectorAll('h2 a[href], h3 a[href], h4 a[href], strong a[href]')];
-  const authorA = headerLinks.find((a) => !isGroupLink(a) && a.innerText.trim()) || headerLinks[0];
   const tsRe = /\/posts\/|\/permalink|story_fbid|\/videos\/|\/photo|\/reel\/|multi_permalinks|pfbid/;
+  // Author and group: walk the post's own links in order. A link to the group itself
+  // ("/groups/<id>/") is the group; the first link to a person's profile is the author.
+  const isGroupLink = (h) => /facebook\.com\/groups\/[^/?#]+\/?(?:[?#]|$)/.test(h);
+  const isProfileLink = (h) =>
+    /\/groups\/[^/]+\/user\/\d+/.test(h) ||
+    /\/profile\.php\?id=\d+/.test(h) ||
+    /facebook\.com\/(?!groups|watch|events|hashtag|stories|reel|photo|search|marketplace|pages|gaming)[A-Za-z0-9.]{3,}\/?(?:[?#]|$)/.test(h);
+  let authorA = null;
+  let groupA = null;
+  for (const a of el.querySelectorAll('a[href]')) {
+    if (el.matches('[role="article"]') && a.closest('[role="article"]') !== el) continue; // a comment
+    const name = (a.innerText || '').trim();
+    if (!name || name.length > 80 || tsRe.test(a.href)) continue;
+    if (!groupA && isGroupLink(a.href)) groupA = a;
+    else if (!authorA && isProfileLink(a.href)) authorA = a;
+    if (authorA && groupA) break;
+  }
   const stamps = [];
   let i = 0;
   for (const a of el.querySelectorAll('a[href]')) {
@@ -78,8 +91,9 @@ function jsPostInfo(el) {
   return {
     body: body ? body.innerText : '',
     full: parts.join(' ') || el.innerText || '',
-    authorName: authorA ? authorA.innerText.trim() : '',
+    authorName: authorA ? authorA.innerText.trim().split('\n')[0] : '',
     authorHref: authorA ? authorA.href : '',
+    groupName: groupA ? groupA.innerText.trim().split('\n')[0] : '',
     stamps,
   };
 }
@@ -292,19 +306,23 @@ class DJAgent {
       await sleep(4000); // results reload
     };
 
+    // The filters panel loads after the results; give it time to appear.
+    await page.getByText(RECENT_POSTS_LABEL).first().waitFor({ timeout: 12000 }).catch(() => {});
     let toggle = await find();
     if (!toggle) {
       const label = page.getByText(RECENT_POSTS_LABEL).first();
       if (!(await label.count())) {
         const seen = await page
           .evaluate(() =>
-            [...document.querySelectorAll('[role="switch"], [role="checkbox"], input[type="checkbox"]')]
+            [...document.querySelectorAll('[role="switch"], [role="checkbox"], input[type="checkbox"], [aria-checked]')]
               .map((e) => e.getAttribute('aria-label') || (e.closest('label') || e.parentElement || e).innerText || '')
               .map((t) => t.trim().split('\n')[0])
               .filter(Boolean),
           )
           .catch(() => []);
         log(`   לא מצאתי את המתג "פוסטים אחרונים". מתגים בעמוד: ${seen.length ? seen.join(' | ') : 'אין'}`);
+        const shot = path.join(path.dirname(this.cfg.history_file || 'x'), 'search_debug.png');
+        if (await page.screenshot({ path: shot }).then(() => true).catch(() => false)) log(`   צילום מסך של עמוד החיפוש נשמר: ${shot}`);
         return false;
       }
       // Only a text label, no switch element: clicking it is the best we can do.
@@ -395,6 +413,7 @@ class DJAgent {
       url,
       text,
       authorName: info.authorName,
+      groupName: info.groupName,
       authorUrl: canonicalProfileUrl(info.authorHref),
       ageText,
     };
@@ -434,7 +453,7 @@ class DJAgent {
     if (this.seenThisRun.has(post.key)) return { age, key: post.key };
     this.seenThisRun.add(post.key);
 
-    const who = post.authorName || '?';
+    const who = [post.authorName, post.groupName && `בקבוצה ${post.groupName}`].filter(Boolean).join(' ') || '?';
     if (age === null) {
       log(`⏭  דילוג – לא הצלחתי לזהות מתי הפוסט עלה (${who})`);
       return { age, key: post.key };
@@ -472,7 +491,7 @@ class DJAgent {
     const preview = post.text.replace(/\s+/g, ' ').slice(0, 250);
     const bar = '='.repeat(70);
     console.log(`\n${bar}`);
-    console.log(`🎯 נמצא פוסט מתאים  |  ${post.authorName || '?'}  |  עלה: ${ageDesc}`);
+    console.log(`🎯 נמצא פוסט מתאים  |  ${post.authorName || '?'}${post.groupName ? `  |  ${post.groupName}` : ''}  |  עלה: ${ageDesc}`);
     console.log(`   ביטוי שזוהה: «${matched}»`);
     console.log(`   ${preview}`);
     if (post.url) console.log(`   ${post.url}`);
