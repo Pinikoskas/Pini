@@ -205,12 +205,24 @@ class DJAgent {
   }
 
   async run({ testWhatsappOnly = false, importGroupsOnly = false } = {}) {
-    const context = await chromium.launchPersistentContext(this.cfg.browser_profile_dir, {
-      headless: false,
-      locale: 'he-IL',
-      viewport: { width: 1280, height: 900 },
-      args: ['--disable-blink-features=AutomationControlled'],
-    });
+    let context;
+    try {
+      context = await chromium.launchPersistentContext(this.cfg.browser_profile_dir, {
+        headless: false,
+        locale: 'he-IL',
+        viewport: { width: 1280, height: 900 },
+        args: ['--disable-blink-features=AutomationControlled'],
+      });
+    } catch (e) {
+      // Chrome won't open a profile that is already open: it hands over to that window and exits.
+      if (/has been closed|existing browser session|ProcessSingleton|profile.*in use/i.test(e.message)) {
+        throw new Error(
+          'הדפדפן של הסוכן כבר פתוח – כנראה הסוכן כבר רץ בחלון אחר. ' +
+            'סגור אותו (Ctrl+C בחלון השחור שלו, וסגור את חלון הדפדפן שלו) ונסה שוב.',
+        );
+      }
+      throw e;
+    }
     let browserClosed = false;
     context.on('close', () => (browserClosed = true));
     const page = context.pages()[0] || (await context.newPage());
