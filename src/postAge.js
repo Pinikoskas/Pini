@@ -112,10 +112,10 @@ function parsePostAge(text, now = new Date()) {
   return null;
 }
 
-/** True only when the age is known AND younger than maxDays. */
-function isRecent(text, maxDays = 7, now = new Date()) {
+/** True only when the age is known AND at most maxDays ("4 ימים" counts as 4 days). */
+function isRecent(text, maxDays = 4, now = new Date()) {
   const age = parsePostAge(text, now);
-  return age !== null && age < maxDays * DAY;
+  return age !== null && age <= maxDays * DAY;
 }
 
 function describeAge(ms) {

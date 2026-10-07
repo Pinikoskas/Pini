@@ -49,13 +49,16 @@ test('unknown timestamps return null', () => {
   assert.equal(age('פיני כהן'), null);
 });
 
-test('one-week limit', () => {
-  assert.equal(isRecent("6 י'", 7, NOW), true);
-  assert.equal(isRecent("3 ש'", 7, NOW), true);
-  assert.equal(isRecent("1 שב'", 7, NOW), false);
-  assert.equal(isRecent('2 שבועות', 7, NOW), false);
-  assert.equal(isRecent('15 בספטמבר', 7, NOW), false);
-  assert.equal(isRecent('לא ידוע', 7, NOW), false);
+test('4-day limit', () => {
+  assert.equal(isRecent("3 ש'", 4, NOW), true);
+  assert.equal(isRecent('אתמול בשעה 14:00', 4, NOW), true);
+  assert.equal(isRecent("3 י'", 4, NOW), true);
+  assert.equal(isRecent('4 ימים', 4, NOW), true);
+  assert.equal(isRecent("5 י'", 4, NOW), false);
+  assert.equal(isRecent("6 י'", 4, NOW), false);
+  assert.equal(isRecent("1 שב'", 4, NOW), false);
+  assert.equal(isRecent('15 בספטמבר', 4, NOW), false);
+  assert.equal(isRecent('לא ידוע', 4, NOW), false);
 });
 
 test('matcher finds DJ requests', () => {

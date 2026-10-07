@@ -153,7 +153,7 @@ class DJAgent {
     this.mode = mode;
     this.matcher = new PostMatcher(cfg.include_patterns, cfg.exclude_patterns);
     this.storage = new Storage(cfg.history_file);
-    this.maxAgeMs = Number(cfg.max_post_age_days ?? 7) * DAY;
+    this.maxAgeMs = Number(cfg.max_post_age_days ?? 4) * DAY;
     this.commentsSent = 0;
     this.messagesSent = 0;
     this.notificationsSent = 0;
@@ -330,7 +330,7 @@ class DJAgent {
       log(`⏭  דילוג – לא הצלחתי לזהות מתי הפוסט עלה (${who})`);
       return;
     }
-    if (age >= this.maxAgeMs) {
+    if (age > this.maxAgeMs) {
       log(`⏭  דילוג – פוסט ישן (${post.ageText}): ${who}`);
       return;
     }
@@ -542,7 +542,7 @@ async function main() {
     throw new Error('ווצאפ כבוי ב-config.yaml (whatsapp.enabled)');
   }
   logStream = fs.createWriteStream(path.resolve(path.dirname(path.resolve(args.config)), 'dj_agent.log'), { flags: 'a' });
-  log(`מצב עבודה: ${mode} | גיל פוסט מקסימלי: ${cfg.max_post_age_days ?? 7} ימים`);
+  log(`מצב עבודה: ${mode} | גיל פוסט מקסימלי: ${cfg.max_post_age_days ?? 4} ימים`);
   await new DJAgent(cfg, mode).run({ testWhatsappOnly: !!args.testWhatsapp });
 }
 
