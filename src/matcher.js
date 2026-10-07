@@ -1,7 +1,8 @@
 // Decide whether a post's text is someone looking for a DJ.
 
 // Spellings of "DJ" people actually write in Hebrew posts.
-const DJ_WORD = String.raw`(?:די\s?ג'?\s?יי|דיג'?יי|דיגיי|דיג'י|די\.?ג'י|d\.?j\.?|dj'?s?|תקליטן|תקליטנית)`;
+// The English forms must be whole words, so "dji" (drones) or "djembe" don't count.
+const DJ_WORD = String.raw`(?:די\s?ג'?\s?יי|דיג'?יי|דיגיי|דיג'י|די\.?ג'י|(?<![a-z])(?:d\.?j\.?|dj'?s?)(?![a-z])|תקליטן|תקליטנית)`;
 
 const DEFAULT_INCLUDE = [
   // "מחפש/ת דיג'יי", "צריכים DJ לחתונה", "ממליצים על די ג'יי?"

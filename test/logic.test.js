@@ -189,3 +189,22 @@ test('groups_last_seen.json remembers the newest post per group', () => {
   assert.equal(b.newestPost('111'), 'https://www.facebook.com/groups/111/posts/9');
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8'))['111'].name, 'חתונות בצפון');
 });
+
+test('terminal: Hebrew lines are pre-reversed for a left-to-right console', () => {
+  const { toVisual } = require('../src/terminal');
+  assert.equal(toVisual('גיל פוסט מקסימלי: 3 ימים'), 'םימי 3 :ילמיסקמ טסופ ליג');
+  assert.equal(
+    toVisual('דילוג – פוסט ישן (26 בספטמבר ב-20:40): Netzor Leshonha בקבוצה dj בישראל'),
+    'לארשיב dj הצובקב Netzor Leshonha :(20:40-ב רבמטפסב 26) ןשי טסופ – גוליד',
+  );
+  assert.equal(toVisual('   עוצר (30 פוסטים)'), '   (םיטסופ 30) רצוע'); // indentation stays, brackets mirrored
+  assert.equal(toVisual('https://www.facebook.com/groups/1/posts/2'), 'https://www.facebook.com/groups/1/posts/2');
+  assert.equal(toVisual('ווצאפ ווב מחובר ✔'), '✔ רבוחמ בוו פאצוו');
+});
+
+test('matcher: DJ must be a whole word (not "dji" drones)', () => {
+  const m = new PostMatcher();
+  assert.equal(m.match('אהלן חברים, מחפש תצלומים (קובץ) של רחפני dji עם טלמטריה'), null);
+  assert.ok(m.match('מחפש DJ לחתונה'));
+  assert.ok(m.match("מחפש dj's לאירוע"));
+});

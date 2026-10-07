@@ -46,6 +46,10 @@ include_patterns: []
 # ביטויים שמסננים החוצה (למשל דיג'יים שמפרסמים את עצמם). ריק = רשימה מובנית.
 exclude_patterns: []
 
+# היפוך עברית בחלון השחור (ב-Windows העברית מוצגת שם הפוכה). ריק = אוטומטי (רק ב-Windows),
+# true = תמיד, false = אף פעם. הקובץ dj_agent.log תמיד נשמר רגיל.
+terminal_hebrew_fix:
+
 # תיקייה לפרופיל הדפדפן (שומר את ההתחברות לפייסבוק ולווצאפ) ולהיסטוריית השליחות
 browser_profile_dir: ./browser_profile
 history_file: ./history.json

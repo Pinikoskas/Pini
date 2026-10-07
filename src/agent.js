@@ -11,11 +11,12 @@ const yaml = require('js-yaml');
 const { chromium } = require('playwright');
 
 const { PostMatcher } = require('./matcher');
-const { parsePostAge, describeAge, DAY } = require('./postAge');
+const { parsePostAge, describeAge, DAY, HOUR } = require('./postAge');
 const { Storage } = require('./storage');
 const { formatPostMessage, checkWhatsAppSettings } = require('./whatsapp');
 const { WhatsAppWeb } = require('./whatsappWeb');
 const { loadGroupsFile, addGroupsToFile, collectJoinedGroups, groupKey, GroupsLastSeen } = require('./groups');
+const { forTerminal, setTerminalHebrewFix } = require('./terminal');
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
 const OLD_POSTS_TO_STOP = 3;
@@ -174,9 +175,9 @@ function canonicalProfileUrl(href) {
 let logStream = null;
 function log(...parts) {
   const time = new Date().toTimeString().slice(0, 8);
-  const line = `${time}  ${parts.join(' ')}`;
-  console.log(line);
-  if (logStream) logStream.write(line + '\n');
+  const text = parts.join(' ');
+  console.log(`${time}  ${forTerminal(text)}`);
+  if (logStream) logStream.write(`${time}  ${text}\n`);
 }
 
 // ---------- the agent ----------
@@ -282,7 +283,8 @@ class DJAgent {
     await page.goto(source.url, { waitUntil: 'domcontentloaded' });
     await sleep(4000);
     const failuresBefore = this.sendFailures;
-    const newest = await this.scrollAndCheck(page, source);
+    const { newest, ages } = await this.scrollAndCheck(page, source);
+    if (source.groupId) this.reportOrder(ages);
     // Remember the newest post of the group for next time – unless this is a test run or a
     // WhatsApp send failed here (then the next scan must reach that post again).
     if (source.groupId && newest && !this.dryRun && this.sendFailures === failuresBefore) {
@@ -290,9 +292,25 @@ class DJAgent {
     }
   }
 
-  /** Scrolls one page and checks its posts. Returns the newest post read ({ age, key }) or null. */
+  /**
+   * Logs whether a group's posts really came newest-first. Allows for Facebook's rounded
+   * ages ("3 ש'") and ignores the first post, which may be pinned.
+   */
+  reportOrder(ages) {
+    if (ages.length < 4) return;
+    let outOfOrder = 0;
+    for (let i = 2; i < ages.length; i++) {
+      const slack = ages[i - 1] < DAY ? HOUR : DAY;
+      if (ages[i] < ages[i - 1] - slack) outOfOrder++;
+    }
+    if (outOfOrder <= 1) log(`   ✔ הקבוצה מסודרת מהחדש לישן (${ages.length} פוסטים נבדקו)`);
+    else log(`   ⚠ הקבוצה לא מסודרת לפי זמן: ${outOfOrder} מתוך ${ages.length} פוסטים יצאו מהסדר`);
+  }
+
+  /** Scrolls one page and checks its posts. Returns { newest: { age, key } | null, ages }. */
   async scrollAndCheck(page, { maxScrolls, untilOld, groupId }) {
     const lastSeenKey = groupId ? this.lastSeen.newestPost(groupId) : null;
+    const ages = [];
     let newest = null;
     let totalPosts = 0;
     let oldInARow = 0; // untilOld: consecutive posts older than the limit
@@ -311,28 +329,29 @@ class DJAgent {
           log(`שגיאה בטיפול בפוסט: ${e.message.split('\n')[0]}`);
         }
         if (!untilOld || !res) continue;
+        if (res.age !== null) ages.push(res.age);
         // Newest by date, not by position: a pinned post at the top may be old.
         if (res.age !== null && (!newest || res.age < newest.age)) newest = res;
         if (lastSeenKey && res.key === lastSeenKey) {
           log(`   הגענו לפוסט האחרון שנבדק בסריקה הקודמת – עוצר את הקבוצה (${totalPosts} פוסטים)`);
-          return newest;
+          return { newest, ages };
         }
         if (res.age === null) continue;
         oldInARow = res.age > this.maxAgeMs ? oldInARow + 1 : 0;
         // A single older post can slip in between new ones, so wait for a few in a row.
         if (oldInARow >= OLD_POSTS_TO_STOP) {
           log(`   הגענו לפוסטים ישנים מ-${this.cfg.max_post_age_days ?? 3} ימים – עוצר את העמוד הזה (${totalPosts} פוסטים)`);
-          return newest;
+          return { newest, ages };
         }
       }
       if (untilOld && emptyScrolls >= 5) {
         log(`   אין עוד תוצאות – עוצר את העמוד הזה (${totalPosts} פוסטים)`);
-        return newest;
+        return { newest, ages };
       }
       await page.mouse.wheel(0, randInt(700, 1300));
       await humanSleep(this.cfg.delay_between_scrolls || [3, 7]);
     }
-    return newest;
+    return { newest, ages };
   }
 
   async readPost(page, el) {
@@ -443,12 +462,13 @@ class DJAgent {
   printPost(post, matched, ageDesc) {
     const preview = post.text.replace(/\s+/g, ' ').slice(0, 250);
     const bar = '='.repeat(70);
-    console.log(`\n${bar}`);
-    console.log(`🎯 נמצא פוסט מתאים  |  ${post.authorName || '?'}${post.groupName ? `  |  ${post.groupName}` : ''}  |  עלה: ${ageDesc}`);
-    console.log(`   ביטוי שזוהה: «${matched}»`);
-    console.log(`   ${preview}`);
-    if (post.url) console.log(`   ${post.url}`);
-    console.log(bar);
+    const lines = [
+      `🎯 נמצא פוסט מתאים  |  ${post.authorName || '?'}${post.groupName ? `  |  ${post.groupName}` : ''}  |  עלה: ${ageDesc}`,
+      `   ביטוי שזוהה: «${matched}»`,
+      `   ${preview}`,
+    ];
+    if (post.url) lines.push(`   ${post.url}`);
+    console.log(`\n${bar}\n${forTerminal(lines.join('\n'))}\n${bar}`);
   }
 }
 
@@ -482,6 +502,7 @@ async function main() {
     const problem = checkWhatsAppSettings(cfg.whatsapp);
     if (problem) throw new Error(problem);
   }
+  setTerminalHebrewFix(cfg.terminal_hebrew_fix);
   logStream = fs.createWriteStream(path.resolve(path.dirname(path.resolve(args.config)), 'dj_agent.log'), { flags: 'a' });
   log(`${args.dryRun ? 'מצב בדיקה (לא שולח לווצאפ) | ' : ''}גיל פוסט מקסימלי: ${cfg.max_post_age_days ?? 3} ימים`);
   await new DJAgent(cfg, { dryRun: args.dryRun }).run({ testWhatsappOnly: args.testWhatsapp, importGroupsOnly: args.importGroups });
