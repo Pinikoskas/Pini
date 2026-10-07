@@ -143,8 +143,16 @@ function startPanel({ configPath, port }) {
     }
   });
 
+  // The program quits when its window is gone: no page connected for a few seconds. This works
+  // whatever opened the page (app window or a normal browser tab), so no copy is left running hidden.
+  let viewers = 0;
+  let quitTimer = null;
+  const QUIT_AFTER_MS = 15000;
+
   // Live updates to the page: log lines, status changes, new leads.
   function streamEvents(req, res) {
+    viewers++;
+    clearTimeout(quitTimer);
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
     const send = (type) => (data) => res.write(`event: ${type}\ndata: ${JSON.stringify(data ?? {})}\n\n`);
     const handlers = { log: send('log'), status: send('status'), lead: send('lead'), groups: send('groups'), cleared: send('cleared'), bookmarks: send('bookmarks') };
@@ -152,6 +160,7 @@ function startPanel({ configPath, port }) {
     const ping = setInterval(() => res.write(': ping\n\n'), 25000);
     req.on('close', () => {
       clearInterval(ping);
+      if (--viewers === 0) quitTimer = setTimeout(() => viewers === 0 && shutdown(), QUIT_AFTER_MS);
       for (const [type, fn] of Object.entries(handlers)) events.off(type, fn);
     });
   }
@@ -173,7 +182,7 @@ function startPanel({ configPath, port }) {
       if (e.code === 'EADDRINUSE') {
         // Already running (e.g. the icon was double-clicked twice): just show its window.
         log(`הסוכן כבר פתוח – מציג את החלון שלו`);
-        openAppWindow(address, windowProfile, { fallback: false });
+        openAppWindow(address, windowProfile);
         setTimeout(() => process.exit(0), 3000);
         resolve();
       } else reject(e);
@@ -181,6 +190,7 @@ function startPanel({ configPath, port }) {
     server.listen(port, '127.0.0.1', () => {
       log(`פאנל הבקרה פועל: ${address}`);
       openAppWindow(address, windowProfile, { onClosed: shutdown });
+      quitTimer = setTimeout(() => viewers === 0 && shutdown(), 90000); // the window never showed up
       process.on('SIGINT', shutdown); // Ctrl+C in the black window
       resolve();
     });
