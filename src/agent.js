@@ -1,7 +1,7 @@
 // Facebook DJ agent.
 //
-// Opens a real Chromium window with your own Facebook login, scrolls the feed, search
-// results and any groups listed in config.yaml, and sends every recent post where someone
+// Opens a real Chromium window with your own Facebook login, scrolls the feed and the
+// groups listed in groups.txt / config.yaml, and sends every recent post where someone
 // is looking for a DJ to your own WhatsApp. It only reads Facebook; it never posts there.
 
 const crypto = require('crypto');
@@ -109,10 +109,6 @@ const rand = (min, max) => min + Math.random() * (max - min);
 const randInt = (min, max) => Math.floor(rand(min, max + 1));
 const humanSleep = ([min, max]) => sleep(rand(min, max) * 1000);
 
-function searchUrl(query) {
-  return `https://www.facebook.com/search/posts?q=${encodeURIComponent(query)}`;
-}
-
 function groupUrl(url) {
   const u = new URL(url);
   u.searchParams.set('sorting_setting', 'CHRONOLOGICAL'); // newest posts first
@@ -121,8 +117,7 @@ function groupUrl(url) {
 
 /**
  * The pages to scan, in order:
- *  - the feed and searches: a fixed number of scrolls (they aren't sorted by time;
- *    Facebook has no "recent posts" filter in search);
+ *  - the feed: a fixed number of scrolls (it never ends and isn't sorted by time);
  *  - groups: sorted newest first, scrolled until posts get older than max_post_age_days
  *    (or the results run out), and until the newest post seen on the previous scan
  *    (groups_last_seen.json).
@@ -132,10 +127,6 @@ function buildSources(cfg) {
   const feedScrolls = Number(cfg.feed_scrolls ?? 40);
   if (feedScrolls > 0) {
     sources.push({ label: 'פיד ראשי', url: 'https://www.facebook.com/', maxScrolls: feedScrolls, untilOld: false });
-  }
-  const searchScrolls = Number(cfg.search_scrolls ?? 10);
-  for (const q of cfg.searches || []) {
-    sources.push({ label: `חיפוש "${q}"`, url: searchUrl(q), maxScrolls: searchScrolls, untilOld: false });
   }
   const cap = Number(cfg.max_scrolls_per_group ?? 100);
   const seen = new Set();
@@ -520,4 +511,4 @@ async function main() {
   await new DJAgent(cfg, { dryRun: args.dryRun }).run({ testWhatsappOnly: args.testWhatsapp, importGroupsOnly: args.importGroups });
 }
 
-module.exports = { main, canonicalPostUrl, canonicalProfileUrl, buildSources, searchUrl, groupUrl, jsNewPosts, jsPostInfo, DJAgent, POST_SELECTOR };
+module.exports = { main, canonicalPostUrl, canonicalProfileUrl, buildSources, groupUrl, jsNewPosts, jsPostInfo, DJAgent, POST_SELECTOR };
