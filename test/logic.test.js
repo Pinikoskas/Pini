@@ -145,7 +145,7 @@ test('sources: feed by scroll count, searches and groups newest-first until old'
       ['פיד ראשי', 40, false],
       ['חיפוש "מחפש דיג\'יי"', 100, true],
       ['חיפוש "צריך DJ"', 100, true],
-      ['קבוצה https://www.facebook.com/groups/123/', 100, true],
+      ['קבוצה 123', 100, true],
     ],
   );
   const u = new URL(searchUrl('צריך DJ'));
@@ -165,12 +165,29 @@ test('groups.txt: import, switch off with #, re-import keeps it off', () => {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djgroups-')), 'groups.txt');
 
   assert.equal(addGroupsToFile(file, [{ id: '111', name: 'חתונות בצפון' }, { id: 'bar.mitzva', name: 'בר מצווה' }]), 2);
-  assert.deepEqual(loadGroupsFile(file), ['https://www.facebook.com/groups/111/', 'https://www.facebook.com/groups/bar.mitzva/']);
+  assert.deepEqual(loadGroupsFile(file), [
+    { url: 'https://www.facebook.com/groups/111/', name: 'חתונות בצפון' },
+    { url: 'https://www.facebook.com/groups/bar.mitzva/', name: 'בר מצווה' },
+  ]);
   assert.match(fs.readFileSync(file, 'utf8'), /groups\/111\/ +# חתונות בצפון/);
 
   // Switch one off, then import again with one new group.
   fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('https://www.facebook.com/groups/111/', '# https://www.facebook.com/groups/111/'));
   assert.equal(addGroupsToFile(file, [{ id: '111', name: 'חתונות בצפון' }, { id: '222', name: 'אירועים' }]), 1);
-  assert.deepEqual(loadGroupsFile(file), ['https://www.facebook.com/groups/bar.mitzva/', 'https://www.facebook.com/groups/222/']);
+  assert.deepEqual(loadGroupsFile(file).map((g) => g.url), ['https://www.facebook.com/groups/bar.mitzva/', 'https://www.facebook.com/groups/222/']);
   assert.deepEqual(loadGroupsFile(path.join(path.dirname(file), 'missing.txt')), []);
+});
+
+test('groups_last_seen.json remembers the newest post per group', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { GroupsLastSeen } = require('../src/groups');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djseen-')), 'groups_last_seen.json');
+  const a = new GroupsLastSeen(file);
+  assert.equal(a.newestPost('111'), null);
+  a.save('111', 'חתונות בצפון', 'https://www.facebook.com/groups/111/posts/9');
+  const b = new GroupsLastSeen(file); // reloaded from disk
+  assert.equal(b.newestPost('111'), 'https://www.facebook.com/groups/111/posts/9');
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8'))['111'].name, 'חתונות בצפון');
 });

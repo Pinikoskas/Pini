@@ -24,7 +24,7 @@ function groupKey(url) {
   return m ? m[1] : null;
 }
 
-/** Active (not commented-out) group URLs from groups.txt. */
+/** Active (not commented-out) groups from groups.txt, as { url, name }. */
 function loadGroupsFile(file) {
   if (!file || !fs.existsSync(file)) return [];
   return fs
@@ -32,8 +32,37 @@ function loadGroupsFile(file) {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line && !line.startsWith('#'))
-    .map((line) => line.split(/\s+#/)[0].trim())
-    .filter((url) => groupKey(url));
+    .map((line) => {
+      const [url, ...rest] = line.split(/\s+#\s*/);
+      return { url: url.trim(), name: rest.join(' #').trim() };
+    })
+    .filter((g) => groupKey(g.url));
+}
+
+/**
+ * groups_last_seen.json: per group, the newest post checked on the previous scan.
+ * The next scan of that group stops when it reaches this post, so it only reads
+ * the handful of posts added since.
+ */
+class GroupsLastSeen {
+  constructor(file) {
+    this.file = file;
+    this.data = {};
+    try {
+      if (file && fs.existsSync(file)) this.data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch {
+      this.data = {};
+    }
+  }
+
+  newestPost(groupId) {
+    return (this.data[groupId] && this.data[groupId].newest_post) || null;
+  }
+
+  save(groupId, name, postKey) {
+    this.data[groupId] = { name: name || '', newest_post: postKey, checked_at: new Date().toISOString() };
+    if (this.file) fs.writeFileSync(this.file, JSON.stringify(this.data, null, 2), 'utf8');
+  }
 }
 
 /** Adds groups to groups.txt, keeping every line already there (including switched-off ones). */
@@ -72,4 +101,4 @@ async function collectJoinedGroups(page, { log, sleep }) {
   return groups;
 }
 
-module.exports = { loadGroupsFile, addGroupsToFile, collectJoinedGroups, groupKey, jsGroupLinks, JOINED_GROUPS_URL };
+module.exports = { loadGroupsFile, addGroupsToFile, collectJoinedGroups, groupKey, jsGroupLinks, GroupsLastSeen, JOINED_GROUPS_URL };

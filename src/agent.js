@@ -15,7 +15,7 @@ const { parsePostAge, describeAge, DAY } = require('./postAge');
 const { Storage } = require('./storage');
 const { formatPostMessage, checkWhatsAppSettings } = require('./whatsapp');
 const { WhatsAppWeb } = require('./whatsappWeb');
-const { loadGroupsFile, addGroupsToFile, collectJoinedGroups } = require('./groups');
+const { loadGroupsFile, addGroupsToFile, collectJoinedGroups, groupKey, GroupsLastSeen } = require('./groups');
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
 const OLD_POSTS_TO_STOP = 3;
@@ -105,7 +105,8 @@ function groupUrl(url) {
  * The pages to scan, in order:
  *  - the feed: a fixed number of scrolls (it never ends and isn't sorted by time);
  *  - searches and groups: sorted newest first, scrolled until posts get older than
- *    max_post_age_days (or the results run out).
+ *    max_post_age_days (or the results run out). Groups also stop at the newest post
+ *    seen on the previous scan (groups_last_seen.json).
  */
 function buildSources(cfg) {
   const sources = [];
@@ -117,9 +118,12 @@ function buildSources(cfg) {
   for (const q of cfg.searches || []) {
     sources.push({ label: `חיפוש "${q}"`, url: searchUrl(q), maxScrolls: cap, untilOld: true });
   }
-  const groups = [...new Set([...(cfg.groups || []), ...loadGroupsFile(cfg.groups_file)])];
-  for (const g of groups) {
-    sources.push({ label: `קבוצה ${g}`, url: groupUrl(g), maxScrolls: cap, untilOld: true });
+  const seen = new Set();
+  for (const g of [...(cfg.groups || []).map((url) => ({ url, name: '' })), ...loadGroupsFile(cfg.groups_file)]) {
+    const id = groupKey(g.url);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    sources.push({ label: `קבוצה ${g.name || id}`, url: groupUrl(g.url), maxScrolls: cap, untilOld: true, groupId: id, groupName: g.name });
   }
   return sources;
 }
@@ -166,7 +170,9 @@ class DJAgent {
     this.storage = new Storage(cfg.history_file);
     this.maxAgeMs = Number(cfg.max_post_age_days ?? 3) * DAY;
     this.whatsapp = cfg.whatsapp || {};
+    this.lastSeen = new GroupsLastSeen(cfg.groups_last_seen_file);
     this.notificationsSent = 0;
+    this.sendFailures = 0;
     this.seenThisRun = new Set();
   }
 
@@ -241,10 +247,23 @@ class DJAgent {
 
   // ---------- scanning ----------
 
-  async scanSource(page, { label, url, maxScrolls, untilOld }) {
-    log(`סורק: ${label}`);
-    await page.goto(url, { waitUntil: 'domcontentloaded' });
+  async scanSource(page, source) {
+    log(`סורק: ${source.label}`);
+    await page.goto(source.url, { waitUntil: 'domcontentloaded' });
     await sleep(4000);
+    const failuresBefore = this.sendFailures;
+    const newest = await this.scrollAndCheck(page, source);
+    // Remember the newest post of the group for next time – unless this is a test run or a
+    // WhatsApp send failed here (then the next scan must reach that post again).
+    if (source.groupId && newest && !this.dryRun && this.sendFailures === failuresBefore) {
+      this.lastSeen.save(source.groupId, source.groupName, newest.key);
+    }
+  }
+
+  /** Scrolls one page and checks its posts. Returns the newest post read ({ age, key }) or null. */
+  async scrollAndCheck(page, { maxScrolls, untilOld, groupId }) {
+    const lastSeenKey = groupId ? this.lastSeen.newestPost(groupId) : null;
+    let newest = null;
     let totalPosts = 0;
     let oldInARow = 0; // untilOld: consecutive posts older than the limit
     let emptyScrolls = 0; // scrolls that brought no new posts
@@ -254,28 +273,36 @@ class DJAgent {
       emptyScrolls = ids.length ? 0 : emptyScrolls + 1;
       if ((s + 1) % 10 === 0) log(`   גלילה ${s + 1} – נסרקו ${totalPosts} פוסטים`);
       for (const id of ids) {
-        let age = null;
+        let res = null;
         try {
-          age = await this.handlePost(page, page.locator(`[data-djbot-id="${id}"]`), { alwaysReadAge: untilOld });
+          res = await this.handlePost(page, page.locator(`[data-djbot-id="${id}"]`), { alwaysReadAge: untilOld });
         } catch (e) {
           // One broken post must not stop the run.
           log(`שגיאה בטיפול בפוסט: ${e.message.split('\n')[0]}`);
         }
-        if (!untilOld || age === null) continue;
-        oldInARow = age > this.maxAgeMs ? oldInARow + 1 : 0;
+        if (!untilOld || !res) continue;
+        // Newest by date, not by position: a pinned post at the top may be old.
+        if (res.age !== null && (!newest || res.age < newest.age)) newest = res;
+        if (lastSeenKey && res.key === lastSeenKey) {
+          log(`   הגענו לפוסט האחרון שנבדק בסריקה הקודמת – עוצר את הקבוצה (${totalPosts} פוסטים)`);
+          return newest;
+        }
+        if (res.age === null) continue;
+        oldInARow = res.age > this.maxAgeMs ? oldInARow + 1 : 0;
         // A single older post can slip in between new ones, so wait for a few in a row.
         if (oldInARow >= OLD_POSTS_TO_STOP) {
           log(`   הגענו לפוסטים ישנים מ-${this.cfg.max_post_age_days ?? 3} ימים – עוצר את העמוד הזה (${totalPosts} פוסטים)`);
-          return;
+          return newest;
         }
       }
       if (untilOld && emptyScrolls >= 5) {
         log(`   אין עוד תוצאות – עוצר את העמוד הזה (${totalPosts} פוסטים)`);
-        return;
+        return newest;
       }
       await page.mouse.wheel(0, randInt(700, 1300));
       await humanSleep(this.cfg.delay_between_scrolls || [3, 7]);
     }
+    return newest;
   }
 
   async readPost(page, el) {
@@ -329,8 +356,8 @@ class DJAgent {
 
   /**
    * Checks one post and sends it to WhatsApp if it's a recent DJ request.
-   * Returns the post's age in ms when it was read (null otherwise). With alwaysReadAge,
-   * the age is read even for posts that don't mention a DJ (used to know when to stop).
+   * Returns { age, key } when the post was read (null otherwise). With alwaysReadAge,
+   * every post is read, even ones that don't mention a DJ (used to know when to stop).
    */
   async handlePost(page, el, { alwaysReadAge = false } = {}) {
     // Facebook removes/hides posts that scrolled far away, so read the text straight from
@@ -344,22 +371,22 @@ class DJAgent {
     const post = await this.readPost(page, el);
     const age = parsePostAge(post.ageText);
     const matched = maybeDj && this.matcher.match(post.text);
-    if (!matched) return age;
-    if (this.seenThisRun.has(post.key)) return age;
+    if (!matched) return { age, key: post.key };
+    if (this.seenThisRun.has(post.key)) return { age, key: post.key };
     this.seenThisRun.add(post.key);
 
     const who = post.authorName || '?';
     if (age === null) {
       log(`⏭  דילוג – לא הצלחתי לזהות מתי הפוסט עלה (${who})`);
-      return age;
+      return { age, key: post.key };
     }
     if (age > this.maxAgeMs) {
       log(`⏭  דילוג – פוסט ישן (${post.ageText}): ${who}`);
-      return age;
+      return { age, key: post.key };
     }
     if (this.storage.postHandled(post.key)) {
       log(`⏭  דילוג – כבר טיפלנו בפוסט הזה: ${who}`);
-      return age;
+      return { age, key: post.key };
     }
 
     const ageDesc = `${post.ageText} (~${describeAge(age)})`;
@@ -367,7 +394,7 @@ class DJAgent {
 
     if (this.dryRun) {
       log('   [בדיקה] היה נשלח אליך לווצאפ');
-      return age;
+      return { age, key: post.key };
     }
     try {
       await this.notify(formatPostMessage(post, ageDesc));
@@ -375,10 +402,11 @@ class DJAgent {
       this.storage.record(post.key, post.authorUrl, 'notify', post.text);
       log('   ✔ נשלח אליך לווצאפ');
     } catch (e) {
+      this.sendFailures++;
       log(`   ✘ שליחה לווצאפ נכשלה: ${e.message.split('\n')[0]}`);
     }
     await page.bringToFront();
-    return age;
+    return { age, key: post.key };
   }
 
   printPost(post, matched, ageDesc) {
@@ -401,6 +429,7 @@ function loadConfig(file) {
   cfg.browser_profile_dir = path.resolve(base, cfg.browser_profile_dir || './browser_profile');
   cfg.history_file = path.resolve(base, cfg.history_file || './history.json');
   cfg.groups_file = path.resolve(base, cfg.groups_file || './groups.txt');
+  cfg.groups_last_seen_file = path.resolve(base, cfg.groups_last_seen_file || './groups_last_seen.json');
   return cfg;
 }
 
