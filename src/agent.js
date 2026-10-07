@@ -297,7 +297,7 @@ class DJAgent {
    * ages ("3 ש'") and ignores the first post, which may be pinned.
    */
   reportOrder(ages) {
-    if (ages.length < 4) return;
+    if (ages.length < 3) return; // the first post may be pinned, so 3 is the least that says anything
     let outOfOrder = 0;
     for (let i = 2; i < ages.length; i++) {
       const slack = ages[i - 1] < DAY ? HOUR : DAY;
