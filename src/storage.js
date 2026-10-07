@@ -20,15 +20,22 @@ class Storage {
     return this.actions.some((a) => a.postKey === postKey);
   }
 
-  record(postKey, authorUrl, action, postText = '') {
+  record(postKey, authorUrl, action, postText = '', { authorName = '', groupName = '' } = {}) {
     this.actions.push({
       postKey,
       authorUrl: authorUrl || '',
+      authorName,
+      groupName,
       action,
       createdAt: new Date().toISOString(),
       postText: postText.slice(0, 500),
     });
     if (this.path) fs.writeFileSync(this.path, JSON.stringify(this.actions, null, 2), 'utf8');
+  }
+
+  /** The latest posts sent to WhatsApp, newest first. */
+  recentLeads(n = 30) {
+    return this.actions.filter((a) => a.action === 'notify').slice(-n).reverse();
   }
 }
 

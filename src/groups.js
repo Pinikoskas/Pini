@@ -39,6 +39,34 @@ function loadGroupsFile(file) {
     .filter((g) => groupKey(g.url));
 }
 
+/** Every group line in groups.txt, switched on or off: [{ id, url, name, enabled }]. */
+function readAllGroups(file) {
+  if (!file || !fs.existsSync(file)) return [];
+  const out = [];
+  for (const raw of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const line = raw.trim();
+    const enabled = !line.startsWith('#');
+    const body = line.replace(/^#\s*/, '');
+    const id = /^https?:\/\//.test(body) ? groupKey(body) : null; // skip plain comment lines
+    if (!id) continue;
+    const [url, ...rest] = body.split(/\s+#\s*/);
+    out.push({ id, url: url.trim(), name: rest.join(' #').trim(), enabled });
+  }
+  return out;
+}
+
+/** Switches groups on/off in groups.txt ({ groupId: true|false }), keeping everything else. */
+function setGroupsEnabled(file, changes) {
+  const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+  const out = lines.map((raw) => {
+    const body = raw.trim().replace(/^#\s*/, '');
+    const id = /^https?:\/\//.test(body) ? groupKey(body) : null;
+    if (!id || !(id in changes)) return raw;
+    return changes[id] ? body : `# ${body}`;
+  });
+  fs.writeFileSync(file, out.join('\n'), 'utf8');
+}
+
 /**
  * groups_last_seen.json: per group, the newest post checked on the previous scan.
  * The next scan of that group stops when it reaches this post, so it only reads
@@ -101,4 +129,14 @@ async function collectJoinedGroups(page, { log, sleep }) {
   return groups;
 }
 
-module.exports = { loadGroupsFile, addGroupsToFile, collectJoinedGroups, groupKey, jsGroupLinks, GroupsLastSeen, JOINED_GROUPS_URL };
+module.exports = {
+  loadGroupsFile,
+  readAllGroups,
+  setGroupsEnabled,
+  addGroupsToFile,
+  collectJoinedGroups,
+  groupKey,
+  jsGroupLinks,
+  GroupsLastSeen,
+  JOINED_GROUPS_URL,
+};

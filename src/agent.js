@@ -5,9 +5,7 @@
 // is looking for a DJ to your own WhatsApp. It only reads Facebook; it never posts there.
 
 const crypto = require('crypto');
-const fs = require('fs');
 const path = require('path');
-const yaml = require('js-yaml');
 const { chromium } = require('playwright');
 
 const { PostMatcher } = require('./matcher');
@@ -17,6 +15,8 @@ const { formatPostMessage, checkWhatsAppSettings } = require('./whatsapp');
 const { WhatsAppWeb } = require('./whatsappWeb');
 const { loadGroupsFile, addGroupsToFile, collectJoinedGroups, groupKey, GroupsLastSeen } = require('./groups');
 const { forTerminal, setTerminalHebrewFix } = require('./terminal');
+const { log, events, setLogFile } = require('./log');
+const { loadConfig } = require('./configFile');
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
 const OLD_POSTS_TO_STOP = 3;
@@ -161,41 +161,81 @@ function canonicalProfileUrl(href) {
   return `https://www.facebook.com/${first}`;
 }
 
-// ---------- logging ----------
-
-let logStream = null;
-function log(...parts) {
-  const time = new Date().toTimeString().slice(0, 8);
-  const text = parts.join(' ');
-  console.log(`${time}  ${forTerminal(text)}`);
-  if (logStream) logStream.write(`${time}  ${text}\n`);
-}
-
 // ---------- the agent ----------
 
 class DJAgent {
-  constructor(cfg, { dryRun = false } = {}) {
-    this.cfg = cfg;
+  /**
+   * configPath: when given, config.yaml is re-read at the start of every round, so changes
+   * (from the control panel or by hand) apply from the next round.
+   */
+  constructor(cfg, { dryRun = false, configPath = null } = {}) {
     this.dryRun = dryRun;
-    this.matcher = new PostMatcher(cfg.include_patterns, cfg.exclude_patterns);
+    this.configPath = configPath;
+    this.applyConfig(cfg);
     this.storage = new Storage(cfg.history_file);
-    this.maxAgeMs = Number(cfg.max_post_age_days ?? 3) * DAY;
-    this.whatsapp = cfg.whatsapp || {};
     this.lastSeen = new GroupsLastSeen(cfg.groups_last_seen_file);
     this.notificationsSent = 0;
     this.sendFailures = 0;
     this.seenThisRun = new Set();
+    this.stopRequested = false;
+    this.wakeUp = null;
+    this.status = { state: 'stopped', detail: '', nextRoundAt: null, sent: 0, dryRun };
+  }
+
+  applyConfig(cfg) {
+    this.cfg = cfg;
+    this.matcher = new PostMatcher(cfg.include_patterns, cfg.exclude_patterns);
+    this.maxAgeMs = Number(cfg.max_post_age_days ?? 3) * DAY;
+    this.whatsapp = cfg.whatsapp || {};
+  }
+
+  reloadConfig() {
+    if (!this.configPath) return;
+    try {
+      this.applyConfig(loadConfig(this.configPath));
+    } catch (e) {
+      log(`⚠ לא הצלחתי לקרוא את config.yaml, ממשיך עם ההגדרות הקודמות: ${e.message.split('\n')[0]}`);
+    }
+  }
+
+  /** What the agent is doing now, for the control panel. */
+  setStatus(state, detail = '', extra = {}) {
+    this.status = { ...this.status, state, detail, nextRoundAt: null, ...extra, sent: this.notificationsSent };
+    events.emit('status', this.status);
+  }
+
+  /** Asks the agent to stop; it finishes the post it's on and exits within seconds. */
+  stop() {
+    if (this.status.state === 'stopped') return;
+    this.stopRequested = true;
+    this.setStatus('stopping', 'עוצר...');
+    if (this.wakeUp) this.wakeUp();
+  }
+
+  /** Sleeps, but returns early when stop() is called. */
+  waitOrStop(ms) {
+    return new Promise((resolve) => {
+      const t = setTimeout(done, ms);
+      function done() {
+        clearTimeout(t);
+        resolve();
+      }
+      this.wakeUp = done;
+    }).finally(() => (this.wakeUp = null));
   }
 
   async setupNotifier(context) {
     log('פותח ווצאפ ווב...');
-    const wa = new WhatsAppWeb(context, this.whatsapp.phone, { log });
-    await wa.ensureReady();
+    this.setStatus('starting', 'מתחבר לווצאפ ווב');
+    this.wa = new WhatsAppWeb(context, this.whatsapp.phone, { log });
+    await this.wa.ensureReady();
     log('ווצאפ ווב מחובר ✔');
-    this.notify = (text) => wa.send(text);
+    this.notify = (text) => this.wa.send(text);
   }
 
   async run({ testWhatsappOnly = false, importGroupsOnly = false } = {}) {
+    this.stopRequested = false;
+    this.setStatus('starting', 'פותח דפדפן');
     let context;
     try {
       context = await chromium.launchPersistentContext(this.cfg.browser_profile_dir, {
@@ -205,6 +245,7 @@ class DJAgent {
         args: ['--disable-blink-features=AutomationControlled'],
       });
     } catch (e) {
+      this.setStatus('stopped');
       // Chrome won't open a profile that is already open: it hands over to that window and exits.
       if (/has been closed|existing browser session|ProcessSingleton|profile.*in use/i.test(e.message)) {
         throw new Error(
@@ -219,6 +260,7 @@ class DJAgent {
     const page = context.pages()[0] || (await context.newPage());
     try {
       if (importGroupsOnly) {
+        this.setStatus('importing', 'אוסף את הקבוצות שלך מפייסבוק');
         await this.ensureLoggedIn(page);
         log('אוסף את הקבוצות שאתה חבר בהן...');
         const groups = await collectJoinedGroups(page, { log, sleep });
@@ -233,10 +275,21 @@ class DJAgent {
         return;
       }
       await page.bringToFront();
+      this.setStatus('starting', 'מתחבר לפייסבוק');
       await this.ensureLoggedIn(page);
-      const everyMinutes = Number(this.cfg.run_every_minutes || 0);
       for (;;) {
-        for (const source of buildSources(this.cfg)) {
+        // Settings and groups changed since the last round take effect now.
+        const phoneBefore = this.whatsapp.phone;
+        this.reloadConfig();
+        if (this.wa && this.whatsapp.phone !== phoneBefore) {
+          log(`מספר הטלפון השתנה – מתחבר לצ'אט החדש בווצאפ`);
+          await this.wa.setPhone(this.whatsapp.phone);
+        }
+        const sources = buildSources(this.cfg);
+        log(`מתחיל סבב: ${sources.length} עמודים לסריקה`);
+        for (const [i, source] of sources.entries()) {
+          if (this.stopRequested) break;
+          this.setStatus('scanning', `${source.label} (${i + 1}/${sources.length})`);
           try {
             await this.scanSource(page, source);
           } catch (e) {
@@ -245,9 +298,13 @@ class DJAgent {
             log(`   ✘ שגיאה בסריקת ${source.label}, ממשיך לעמוד הבא: ${e.message.split('\n')[0]}`);
           }
         }
-        if (!everyMinutes) break;
-        log(`סבב הסתיים. נשלחו לווצאפ עד עכשיו: ${this.notificationsSent}. סבב הבא בעוד ${everyMinutes} דקות (Ctrl+C לעצירה)`);
-        await sleep(everyMinutes * 60 * 1000);
+        const everyMinutes = Number(this.cfg.run_every_minutes || 0);
+        if (this.stopRequested || !everyMinutes) break;
+        const nextRoundAt = Date.now() + everyMinutes * 60 * 1000;
+        log(`סבב הסתיים. נשלחו לווצאפ עד עכשיו: ${this.notificationsSent}. סבב הבא בעוד ${everyMinutes} דקות`);
+        this.setStatus('waiting', `ממתין לסבב הבא`, { nextRoundAt });
+        await this.waitOrStop(nextRoundAt - Date.now());
+        if (this.stopRequested) break;
       }
     } catch (e) {
       if (!browserClosed && !page.isClosed()) throw e;
@@ -255,6 +312,8 @@ class DJAgent {
     } finally {
       log(`סיום. נשלחו לווצאפ: ${this.notificationsSent}`);
       await context.close().catch(() => {});
+      this.stopRequested = false;
+      this.setStatus('stopped');
     }
   }
 
@@ -290,7 +349,7 @@ class DJAgent {
     if (source.groupId) this.reportOrder(ages);
     // Remember the newest post of the group for next time – unless this is a test run or a
     // WhatsApp send failed here (then the next scan must reach that post again).
-    if (source.groupId && newest && !this.dryRun && this.sendFailures === failuresBefore) {
+    if (source.groupId && newest && !this.dryRun && !this.stopRequested && this.sendFailures === failuresBefore) {
       this.lastSeen.save(source.groupId, source.groupName, newest.key);
     }
   }
@@ -318,12 +377,13 @@ class DJAgent {
     let totalPosts = 0;
     let oldInARow = 0; // untilOld: consecutive posts older than the limit
     let emptyScrolls = 0; // scrolls that brought no new posts
-    for (let s = 0; s < maxScrolls; s++) {
+    for (let s = 0; s < maxScrolls && !this.stopRequested; s++) {
       const ids = await page.evaluate(jsNewPosts, POST_SELECTOR);
       totalPosts += ids.length;
       emptyScrolls = ids.length ? 0 : emptyScrolls + 1;
       if ((s + 1) % 10 === 0) log(`   גלילה ${s + 1} – נסרקו ${totalPosts} פוסטים`);
       for (const id of ids) {
+        if (this.stopRequested) break;
         let res = null;
         try {
           res = await this.handlePost(page, page.locator(`[data-djbot-id="${id}"]`), { alwaysReadAge: untilOld });
@@ -452,7 +512,9 @@ class DJAgent {
     try {
       await this.notify(formatPostMessage(post, ageDesc));
       this.notificationsSent++;
-      this.storage.record(post.key, post.authorUrl, 'notify', post.text);
+      this.storage.record(post.key, post.authorUrl, 'notify', post.text, { authorName: post.authorName, groupName: post.groupName });
+      events.emit('lead', this.storage.recentLeads(1)[0]);
+      this.setStatus(this.status.state, this.status.detail);
       log('   ✔ נשלח אליך לווצאפ');
     } catch (e) {
       this.sendFailures++;
@@ -477,38 +539,40 @@ class DJAgent {
 
 // ---------- entry point ----------
 
-function loadConfig(file) {
-  const cfg = yaml.load(fs.readFileSync(file, 'utf8')) || {};
-  const base = path.dirname(path.resolve(file));
-  cfg.browser_profile_dir = path.resolve(base, cfg.browser_profile_dir || './browser_profile');
-  cfg.history_file = path.resolve(base, cfg.history_file || './history.json');
-  cfg.groups_file = path.resolve(base, cfg.groups_file || './groups.txt');
-  cfg.groups_last_seen_file = path.resolve(base, cfg.groups_last_seen_file || './groups_last_seen.json');
-  return cfg;
-}
-
 function parseArgs(argv) {
-  const args = { config: 'config.yaml', dryRun: false, testWhatsapp: false, importGroups: false };
+  const args = { config: 'config.yaml', dryRun: false, testWhatsapp: false, importGroups: false, noPanel: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--config') args.config = argv[++i];
     else if (argv[i] === '--dry-run') args.dryRun = true;
     else if (argv[i] === '--test-whatsapp') args.testWhatsapp = true;
     else if (argv[i] === '--import-groups') args.importGroups = true;
+    else if (argv[i] === '--no-panel') args.noPanel = true;
   }
   return args;
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const cfg = loadConfig(args.config);
+  const configPath = path.resolve(args.config);
+  const cfg = loadConfig(configPath);
+  setTerminalHebrewFix(cfg.terminal_hebrew_fix);
+  setLogFile(path.join(path.dirname(configPath), 'dj_agent.log'));
+
+  // Plain `node index.js` (or run.bat): the control panel, where the agent is started and stopped.
+  if (!args.noPanel && !args.testWhatsapp && !args.importGroups && !args.dryRun) {
+    await require('./panel').startPanel({ configPath, port: Number(cfg.panel_port || 3210) });
+    return;
+  }
+
   if ((!args.dryRun && !args.importGroups) || args.testWhatsapp) {
     const problem = checkWhatsAppSettings(cfg.whatsapp);
     if (problem) throw new Error(problem);
   }
-  setTerminalHebrewFix(cfg.terminal_hebrew_fix);
-  logStream = fs.createWriteStream(path.resolve(path.dirname(path.resolve(args.config)), 'dj_agent.log'), { flags: 'a' });
   log(`${args.dryRun ? 'מצב בדיקה (לא שולח לווצאפ) | ' : ''}גיל פוסט מקסימלי: ${cfg.max_post_age_days ?? 3} ימים`);
-  await new DJAgent(cfg, { dryRun: args.dryRun }).run({ testWhatsappOnly: args.testWhatsapp, importGroupsOnly: args.importGroups });
+  await new DJAgent(cfg, { dryRun: args.dryRun, configPath }).run({
+    testWhatsappOnly: args.testWhatsapp,
+    importGroupsOnly: args.importGroups,
+  });
 }
 
 module.exports = { main, canonicalPostUrl, canonicalProfileUrl, buildSources, groupUrl, jsNewPosts, jsPostInfo, DJAgent, POST_SELECTOR };

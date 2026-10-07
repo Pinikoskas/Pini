@@ -203,3 +203,53 @@ test('matcher: DJ must be a whole word (not "dji" drones)', () => {
   assert.ok(m.match('מחפש DJ לחתונה'));
   assert.ok(m.match("מחפש dj's לאירוע"));
 });
+
+test('config: panel edits single values and keeps comments; bad values rejected', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { updateConfigValues, loadConfig, editableValues } = require('../src/configFile');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djcfg-')), 'config.yaml');
+  fs.writeFileSync(file, '# הסבר\nmax_post_age_days: 3\n\n# ווצאפ\nwhatsapp:\n  phone: ""\n\nrun_every_minutes: 60\n');
+  updateConfigValues(file, { phone: '050-1234567', max_post_age_days: '2', run_every_minutes: 30, feed_scrolls: 10 });
+  const text = fs.readFileSync(file, 'utf8');
+  assert.match(text, /# הסבר\nmax_post_age_days: 2\n/);
+  assert.match(text, /# ווצאפ\nwhatsapp:\n  phone: "050-1234567"\n/);
+  assert.deepEqual(editableValues(loadConfig(file)), {
+    phone: '050-1234567', max_post_age_days: 2, run_every_minutes: 30, feed_scrolls: 10, max_scrolls_per_group: 100,
+  });
+  assert.throws(() => updateConfigValues(file, { max_post_age_days: 0 }));
+  assert.throws(() => updateConfigValues(file, { run_every_minutes: 'abc' }));
+  assert.throws(() => updateConfigValues(file, { something_else: 1 }));
+  assert.equal(loadConfig(file).max_post_age_days, 2); // unchanged by the rejected edits
+});
+
+test('groups.txt: panel lists all groups and switches them on/off', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { readAllGroups, setGroupsEnabled, loadGroupsFile } = require('../src/groups');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djg-')), 'groups.txt');
+  fs.writeFileSync(file, '# כותרת\n\nhttps://www.facebook.com/groups/1/   # דיג\'יים\n# https://www.facebook.com/groups/2/   # אייפונס\n');
+  assert.deepEqual(readAllGroups(file).map((g) => [g.id, g.name, g.enabled]), [['1', "דיג'יים", true], ['2', 'אייפונס', false]]);
+  setGroupsEnabled(file, { 1: false, 2: true });
+  assert.deepEqual(readAllGroups(file).map((g) => [g.id, g.enabled]), [['1', false], ['2', true]]);
+  assert.deepEqual(loadGroupsFile(file).map((g) => g.url), ['https://www.facebook.com/groups/2/']);
+  assert.match(fs.readFileSync(file, 'utf8'), /^# כותרת\n/); // header kept
+});
+
+test('agent re-reads config.yaml (changes apply from the next round)', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { DJAgent } = require('../src/agent');
+  const { loadConfig, updateConfigValues } = require('../src/configFile');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djr-')), 'config.yaml');
+  fs.writeFileSync(file, 'max_post_age_days: 3\nwhatsapp:\n  phone: "0501111111"\n');
+  const agent = new DJAgent(loadConfig(file), { configPath: file });
+  updateConfigValues(file, { max_post_age_days: 5, phone: '0502222222' });
+  assert.equal(agent.maxAgeMs, 3 * DAY); // not in the middle of a round
+  agent.reloadConfig(); // what the agent does at the start of each round
+  assert.equal(agent.maxAgeMs, 5 * DAY);
+  assert.equal(agent.whatsapp.phone, '0502222222');
+});

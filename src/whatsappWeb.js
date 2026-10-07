@@ -50,6 +50,12 @@ class WhatsAppWeb {
     throw new Error('ווצאפ ווב לא נטען תוך 10 דקות (לא נסרק QR?)');
   }
 
+  /** Switches to another phone's chat (the number was changed in the settings). */
+  async setPhone(phone) {
+    this.phone = normalizePhone(phone);
+    await this.ensureReady();
+  }
+
   async send(text) {
     let box = this.page && !this.page.isClosed() ? this.page.locator(COMPOSE_BOX).first() : null;
     if (!box || !(await box.isVisible().catch(() => false))) {
