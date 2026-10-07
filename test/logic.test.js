@@ -253,34 +253,3 @@ test('agent re-reads config.yaml (changes apply from the next round)', () => {
   assert.equal(agent.maxAgeMs, 5 * DAY);
   assert.equal(agent.whatsapp.phone, '0502222222');
 });
-
-test('panel deletes: bookmarks and history, and a running agent does not write them back', () => {
-  const fs = require('fs');
-  const os = require('os');
-  const path = require('path');
-  const { GroupsLastSeen } = require('../src/groups');
-  const { Storage } = require('../src/storage');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'djdel-'));
-
-  const seenFile = path.join(dir, 'groups_last_seen.json');
-  const agentSeen = new GroupsLastSeen(seenFile); // the running agent's copy
-  agentSeen.save('111', 'א', 'p1');
-  agentSeen.save('222', 'ב', 'p2');
-  assert.deepEqual(new GroupsLastSeen(seenFile).list().map((b) => b.id).sort(), ['111', '222']);
-  assert.equal(new GroupsLastSeen(seenFile).remove({ ids: ['111'] }), 1); // the panel deletes one
-  agentSeen.save('333', 'ג', 'p3'); // the agent saves another group afterwards
-  assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(seenFile, 'utf8'))).sort(), ['222', '333']);
-  assert.equal(new GroupsLastSeen(seenFile).remove({ all: true }), 2);
-  assert.deepEqual(new GroupsLastSeen(seenFile).list(), []);
-
-  const histFile = path.join(dir, 'history.json');
-  const agentHist = new Storage(histFile);
-  agentHist.record('k1', '', 'notify', 'טקסט', { authorName: 'דנה', groupName: 'א' });
-  agentHist.record('k2', '', 'notify');
-  assert.equal(new Storage(histFile).forget({ postKeys: ['k1'] }), 1);
-  agentHist.record('k3', '', 'notify');
-  assert.deepEqual(new Storage(histFile).recentLeads().map((a) => a.postKey), ['k3', 'k2']);
-  new Storage(histFile).forget({ all: true });
-  agentHist.reload();
-  assert.equal(agentHist.postHandled('k2'), false);
-});

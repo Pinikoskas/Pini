@@ -79,22 +79,6 @@
   .lead p { margin: 6px 0; font-size: 14px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .lead a { color: var(--accent); font-size: 14px; }
   .stat { font-size: 14px; color: var(--muted); }
-  .xbtn { border: 0; background: none; color: var(--muted); padding: 2px 6px; font-size: 15px; border-radius: 6px; }
-  .xbtn:hover { color: var(--bad); background: var(--bad-soft); }
-  .lead { position: relative; }
-  .lead .xbtn { position: absolute; top: 6px; left: 6px; }
-  .marks { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
-  .mark { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
-  .mark:last-child { border-bottom: 0; }
-  .mark .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mark .when { color: var(--muted); font-size: 13px; white-space: nowrap; }
-  .mark a { color: var(--accent); font-size: 13px; white-space: nowrap; }
-  details.about summary { cursor: pointer; font-weight: 600; font-size: 16px; list-style: none; display: flex; justify-content: space-between; }
-  details.about summary::after { content: "▾"; color: var(--muted); }
-  details.about:not([open]) summary::after { content: "◂"; }
-  details.about ul { margin: 12px 0 0; padding-inline-start: 20px; display: grid; gap: 8px; font-size: 14px; }
-  details.about li b { color: var(--text); }
-  details.about li { color: var(--muted); }
   .stat b { color: var(--text); }
 </style>
 </head>
@@ -115,23 +99,6 @@
 
 <main>
   <div class="col">
-    <section>
-      <details class="about" id="about" open>
-        <summary>מה הבוט עושה</summary>
-        <ul>
-          <li><b>מחפש לקוחות בשבילך בפייסבוק.</b> גולל בפיד הראשי ובקבוצות שבחרת, וקורא כל פוסט.</li>
-          <li><b>מזהה מי מחפש דיג'יי:</b> "מחפש דיג'יי", "צריכים DJ לחתונה", "ממליצים על תקליטן" וכו'. מדלג על דיג'יים שמפרסמים את עצמם, על מי שמחפש מורה ל-DJ ועל קנייה/מכירה של ציוד.</li>
-          <li><b>רק פוסטים חדשים:</b> שולח רק פוסטים מהימים האחרונים (לפי "כמה ימים אחורה" בהגדרות).</li>
-          <li><b>שולח לך לווצאפ:</b> כל פוסט מתאים מגיע אליך לצ'אט "אני", עם השם, הקבוצה, מתי עלה, הטקסט וקישור – ואתה פונה בעצמך, בהודעה אישית.</li>
-          <li><b>פעם אחת בלבד:</b> פוסט שכבר נשלח אליך לא יישלח שוב.</li>
-          <li><b>סריקה חכמה בקבוצות:</b> הקבוצות נסרקות מהחדש לישן. הבוט זוכר את הפוסט האחרון שבדק בכל קבוצה, ובסבב הבא בודק רק את מה שנוסף מאז.</li>
-          <li><b>רץ לבד:</b> סורק מחדש כל כמה דקות (לפי ההגדרות), כל עוד החלון פתוח.</li>
-          <li><b>בטוח לחשבון:</b> בפייסבוק הבוט רק קורא – לא מגיב, לא שולח הודעות ולא מפרסם כלום.</li>
-          <li><b>מצב בדיקה:</b> סורק ומציג בלוג מה היה נשלח, בלי לשלוח לווצאפ.</li>
-        </ul>
-      </details>
-    </section>
-
     <section>
       <h2>הגדרות</h2>
       <p class="hint">נשמר מיד. אם הסוכן באמצע סבב – יחול מהסבב הבא.</p>
@@ -162,23 +129,13 @@
 
   <div class="col">
     <section>
-      <h2>לוג – מה קורה עכשיו
-        <span class="row"><label class="check"><input type="checkbox" id="follow" checked> גלילה אוטומטית</label>
-        <button class="small" id="clearLog" title="מנקה את התצוגה (הקובץ dj_agent.log נשמר)">🧹 נקה</button></span>
-      </h2>
+      <h2>מה הסוכן עושה <label class="check"><input type="checkbox" id="follow" checked> גלילה אוטומטית</label></h2>
       <div class="log" id="log"></div>
     </section>
 
     <section>
-      <h2>פוסטים שנשלחו אליך לאחרונה <button class="small" id="clearLeads">🗑 מחק את כל ההיסטוריה</button></h2>
-      <p class="hint">פוסט שנמחק מההיסטוריה עלול להישלח אליך שוב, אם הוא עדיין חדש.</p>
+      <h2>פוסטים שנשלחו אליך לאחרונה</h2>
       <div class="leads" id="leads"></div>
-    </section>
-
-    <section>
-      <h2>הפוסט האחרון שנשמר בכל קבוצה <button class="small" id="clearMarks">🗑 מחק הכל</button></h2>
-      <p class="hint">מכאן הבוט ממשיך בכל קבוצה: בסבב הבא הוא עוצר כשהוא מגיע לפוסט הזה. מחיקה = הקבוצה תיסרק שוב מההתחלה (עד "כמה ימים אחורה").</p>
-      <div class="marks" id="marks"></div>
     </section>
   </div>
 </main>
@@ -331,7 +288,6 @@ function renderLeads() {
   $('leads').innerHTML = leads.length
     ? leads.map((l) => `
       <div class="lead">
-        <button class="xbtn" data-forget="${esc(l.postKey)}" title="מחק מההיסטוריה">✕</button>
         <div class="who">${esc(l.authorName || 'לא ידוע')}</div>
         <div class="meta">${l.groupName ? `בקבוצה ${esc(l.groupName)} · ` : ''}נשלח ${esc(timeAgo(l.createdAt))}</div>
         <p>${esc(l.postText)}</p>
@@ -340,61 +296,13 @@ function renderLeads() {
     : '<div class="empty">עוד לא נשלחו פוסטים</div>';
 }
 
-$('leads').onclick = async (ev) => {
-  const key = ev.target.dataset && ev.target.dataset.forget;
-  if (!key) return;
-  ({ leads } = await api('/api/leads/delete', { postKeys: [key] }));
-  renderLeads();
-};
-$('clearLeads').onclick = async () => {
-  if (!confirm('למחוק את כל היסטוריית השליחות?\nפוסטים שעדיין חדשים יישלחו אליך שוב.')) return;
-  ({ leads } = await api('/api/leads/delete', { all: true }));
-  renderLeads();
-};
-
-// ---------- bookmarks: the last post saved per group ----------
-let marks = [];
-function renderMarks() {
-  $('marks').innerHTML = marks.length
-    ? marks.map((m) => `
-      <div class="mark">
-        <span class="name" title="${esc(m.name)}">${esc(m.name)}</span>
-        <span class="when">${m.checked_at ? esc(timeAgo(m.checked_at)) : ''}</span>
-        ${/^https?:/.test(m.newest_post) ? `<a href="${esc(m.newest_post)}" target="_blank" rel="noopener">הפוסט ↗</a>` : ''}
-        <button class="xbtn" data-mark="${esc(m.id)}" title="מחק – הקבוצה תיסרק מההתחלה">✕</button>
-      </div>`).join('')
-    : '<div class="empty">עוד לא נשמרו פוסטים. הם נשמרים אחרי שהבוט סורק כל קבוצה.</div>';
-}
-$('marks').onclick = async (ev) => {
-  const id = ev.target.dataset && ev.target.dataset.mark;
-  if (!id) return;
-  ({ bookmarks: marks } = await api('/api/bookmarks/delete', { ids: [id] }));
-  renderMarks();
-};
-$('clearMarks').onclick = async () => {
-  if (!confirm('למחוק את כל הסימונים?\nבסבב הבא כל הקבוצות ייסרקו מההתחלה – זה ייקח יותר זמן.')) return;
-  ({ bookmarks: marks } = await api('/api/bookmarks/delete', { all: true }));
-  renderMarks();
-};
-
-// ---------- log ----------
-$('clearLog').onclick = () => api('/api/logs/clear', {});
-
-// ---------- about: remember if it was folded ----------
-try {
-  if (localStorage.getItem('aboutClosed') === '1') $('about').open = false;
-  $('about').ontoggle = () => localStorage.setItem('aboutClosed', $('about').open ? '0' : '1');
-} catch {}
-
 // ---------- start ----------
 async function load() {
   const s = await api('/api/state');
   status = s.status;
   groups = s.groups;
   leads = s.leads;
-  marks = s.bookmarks;
   fillSettings(s.settings);
-  renderMarks();
   renderStatus();
   renderGroups();
   renderLeads();
@@ -407,8 +315,6 @@ const live = new EventSource('/api/events');
 live.addEventListener('log', (e) => addLog(JSON.parse(e.data)));
 live.addEventListener('status', (e) => { status = JSON.parse(e.data); renderStatus(); });
 live.addEventListener('lead', (e) => { leads = [JSON.parse(e.data), ...leads].slice(0, 30); renderLeads(); });
-live.addEventListener('cleared', () => ($('log').innerHTML = ''));
-live.addEventListener('bookmarks', () => api('/api/state').then((s) => { marks = s.bookmarks; renderMarks(); }));
 live.addEventListener('groups', () => api('/api/state').then((s) => { groups = s.groups; renderGroups(); }));
 let connectedOnce = false;
 live.onopen = () => {
