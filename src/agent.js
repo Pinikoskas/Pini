@@ -13,7 +13,7 @@ const { chromium } = require('playwright');
 const { PostMatcher } = require('./matcher');
 const { parsePostAge, describeAge, DAY } = require('./postAge');
 const { Storage } = require('./storage');
-const { formatPostMessage, sendWhatsApp, checkWhatsAppSettings } = require('./whatsapp');
+const { formatPostMessage, checkWhatsAppSettings } = require('./whatsapp');
 const { WhatsAppWeb } = require('./whatsappWeb');
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
@@ -131,10 +131,6 @@ class DJAgent {
   }
 
   async setupNotifier(context) {
-    if ((this.whatsapp.method || 'web') === 'callmebot') {
-      this.notify = (text) => sendWhatsApp(this.whatsapp, text);
-      return;
-    }
     log('פותח ווצאפ ווב...');
     const wa = new WhatsAppWeb(context, this.whatsapp.phone, { log });
     await wa.ensureReady();

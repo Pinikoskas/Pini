@@ -5,14 +5,10 @@
 max_post_age_days: 3
 
 # ---- שליחת כל פוסט שנמצא אליך לווצאפ ----
-# phone = המספר שלך (למשל 0501234567). ההודעות יישלחו לצ'אט "אני" שלך.
-# method:
-#   web       – דרך ווצאפ ווב באותו דפדפן (בפעם הראשונה סורקים QR). מומלץ.
-#   callmebot – דרך שירות CallMeBot (צריך apikey: https://www.callmebot.com/blog/free-api-whatsapp-messages/)
+# phone = המספר שלך (למשל 0501234567). ההודעות יישלחו לצ'אט "אני" שלך דרך ווצאפ ווב
+# (בפעם הראשונה סורקים QR).
 whatsapp:
-  method: web
   phone: ""
-  apikey: ""
 
 # לחזור על הסריקה כל X דקות (0 = לסרוק פעם אחת ולצאת)
 run_every_minutes: 60

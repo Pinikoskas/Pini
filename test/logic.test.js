@@ -109,7 +109,7 @@ test('url helpers', () => {
   );
 });
 
-const { formatPostMessage, checkWhatsAppSettings, sendWhatsApp } = require('../src/whatsapp');
+const { formatPostMessage, checkWhatsAppSettings } = require('../src/whatsapp');
 
 test('whatsapp message format', () => {
   const msg = formatPostMessage(
@@ -124,10 +124,8 @@ test('whatsapp message format', () => {
 
 test('whatsapp settings check', () => {
   assert.ok(checkWhatsAppSettings(undefined));
-  assert.ok(checkWhatsAppSettings({ phone: '', apikey: '' }));
-  assert.equal(checkWhatsAppSettings({ phone: '0501234567' }), null); // web: no apikey needed
-  assert.ok(checkWhatsAppSettings({ method: 'callmebot', phone: '0501234567', apikey: '' }));
-  assert.equal(checkWhatsAppSettings({ method: 'callmebot', phone: '+972501234567', apikey: '123' }), null);
+  assert.ok(checkWhatsAppSettings({ phone: '' }));
+  assert.equal(checkWhatsAppSettings({ phone: '0501234567' }), null);
 });
 
 test('whatsapp web phone normalization', () => {
@@ -137,20 +135,3 @@ test('whatsapp web phone normalization', () => {
   assert.equal(normalizePhone('00972501234567'), '972501234567');
 });
 
-test('whatsapp request url and error detection', async () => {
-  const realFetch = global.fetch;
-  let calledUrl = '';
-  try {
-    global.fetch = async (url) => { calledUrl = url; return { ok: true, status: 200, text: async () => '<p>Message queued</p>' }; };
-    await sendWhatsApp({ phone: '+972 50-123-4567', apikey: '999' }, 'שלום');
-    const u = new URL(calledUrl);
-    assert.equal(u.searchParams.get('phone'), '+972501234567');
-    assert.equal(u.searchParams.get('apikey'), '999');
-    assert.equal(u.searchParams.get('text'), 'שלום');
-
-    global.fetch = async () => ({ ok: true, status: 200, text: async () => 'APIKey is invalid' });
-    await assert.rejects(sendWhatsApp({ phone: '1', apikey: 'x' }, 'hi'));
-  } finally {
-    global.fetch = realFetch;
-  }
-});
