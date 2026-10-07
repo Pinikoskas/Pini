@@ -4,3 +4,4 @@ history.json
 *.log
 groups.txt
 groups_last_seen.json
+panel_window/

@@ -540,13 +540,14 @@ class DJAgent {
 // ---------- entry point ----------
 
 function parseArgs(argv) {
-  const args = { config: 'config.yaml', dryRun: false, testWhatsapp: false, importGroups: false, noPanel: false };
+  const args = { config: 'config.yaml', dryRun: false, testWhatsapp: false, importGroups: false, noPanel: false, createShortcut: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--config') args.config = argv[++i];
     else if (argv[i] === '--dry-run') args.dryRun = true;
     else if (argv[i] === '--test-whatsapp') args.testWhatsapp = true;
     else if (argv[i] === '--import-groups') args.importGroups = true;
     else if (argv[i] === '--no-panel') args.noPanel = true;
+    else if (argv[i] === '--create-shortcut') args.createShortcut = true;
   }
   return args;
 }
@@ -557,6 +558,12 @@ async function main() {
   const cfg = loadConfig(configPath);
   setTerminalHebrewFix(cfg.terminal_hebrew_fix);
   setLogFile(path.join(path.dirname(configPath), 'dj_agent.log'));
+
+  if (args.createShortcut) {
+    const link = require('./shortcut').createDesktopShortcut(path.dirname(configPath));
+    log(`✔ נוצר קיצור דרך בשולחן העבודה: ${link}`);
+    return;
+  }
 
   // Plain `node index.js` (or run.bat): the control panel, where the agent is started and stopped.
   if (!args.noPanel && !args.testWhatsapp && !args.importGroups && !args.dryRun) {

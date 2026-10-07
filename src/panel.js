@@ -4,7 +4,7 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 
 const { DJAgent } = require('./agent');
 const { loadConfig, editableValues, updateConfigValues } = require('./configFile');
@@ -14,6 +14,7 @@ const { Storage } = require('./storage');
 const { log, events, recentLogs } = require('./log');
 
 const PAGE = path.join(__dirname, 'panel.html');
+const ICON = path.join(__dirname, '..', 'assets', 'icon.png');
 
 function startPanel({ configPath, port }) {
   let bot = null; // the agent that is running (or ran last)
@@ -100,6 +101,11 @@ function startPanel({ configPath, port }) {
         res.end(fs.readFileSync(PAGE));
         return;
       }
+      if (req.method === 'GET' && url.pathname === '/icon.png') {
+        res.writeHead(200, { 'Content-Type': 'image/png' });
+        res.end(fs.readFileSync(ICON));
+        return;
+      }
       if (req.method === 'GET' && url.pathname === '/api/events') return streamEvents(req, res);
       const action = actions[`${req.method} ${url.pathname}`];
       if (!action) throw httpError(404, 'לא נמצא');
@@ -123,26 +129,83 @@ function startPanel({ configPath, port }) {
     });
   }
 
+  // Closing the program: stop the agent cleanly (it finishes the post it's on), then exit.
+  async function shutdown() {
+    if (bot && bot.status.state !== 'stopped') {
+      log('סוגר – עוצר את הסוכן...');
+      bot.stop();
+      for (let i = 0; i < 40 && bot.status.state !== 'stopped'; i++) await new Promise((r) => setTimeout(r, 500));
+    }
+    process.exit(0);
+  }
+
+  const windowProfile = path.join(path.dirname(configPath), 'panel_window');
   return new Promise((resolve, reject) => {
     const address = `http://localhost:${port}`;
     server.on('error', (e) => {
       if (e.code === 'EADDRINUSE') {
-        log(`הפאנל כבר פתוח בחלון אחר – פותח אותו בדפדפן: ${address}`);
-        openInBrowser(address);
+        // Already running (e.g. the icon was double-clicked twice): just show its window.
+        log(`הסוכן כבר פתוח – מציג את החלון שלו`);
+        openAppWindow(address, windowProfile, { fallback: false });
+        setTimeout(() => process.exit(0), 3000);
         resolve();
       } else reject(e);
     });
     server.listen(port, '127.0.0.1', () => {
-      log(`פאנל הבקרה פועל: ${address}  (סגירת החלון הזה סוגרת גם את הסוכן)`);
-      openInBrowser(address);
-      // Ctrl+C: stop the agent cleanly before exiting.
-      process.on('SIGINT', async () => {
-        if (bot) bot.stop();
-        setTimeout(() => process.exit(0), 3000);
-      });
+      log(`פאנל הבקרה פועל: ${address}`);
+      openAppWindow(address, windowProfile, { onClosed: shutdown });
+      process.on('SIGINT', shutdown); // Ctrl+C in the black window
       resolve();
     });
   });
+}
+
+/**
+ * Opens the panel in its own app window (no address bar or tabs), using the Chromium that
+ * came with the agent, or Edge. Closing that window calls onClosed. If no app window can
+ * be opened, falls back to the normal browser.
+ */
+function openAppWindow(url, profileDir, { onClosed = null, fallback = true } = {}) {
+  const exe = findAppBrowser();
+  if (!exe) {
+    if (fallback) openInBrowser(url);
+    return;
+  }
+  const args = [`--app=${url}`, `--user-data-dir=${profileDir}`, '--window-size=1280,860', '--no-first-run', '--no-default-browser-check', '--disable-features=Translate'];
+  if (process.getuid && process.getuid() === 0) args.push('--no-sandbox'); // Chromium refuses to run as root otherwise (Linux)
+  const started = Date.now();
+  // No "Google API keys are missing" bar in the bundled Chromium.
+  const env = { ...process.env, GOOGLE_API_KEY: 'no', GOOGLE_DEFAULT_CLIENT_ID: 'no', GOOGLE_DEFAULT_CLIENT_SECRET: 'no' };
+  const proc = spawn(exe, args, { stdio: 'ignore', env });
+  const failed = () => {
+    if (fallback) {
+      log('לא הצלחתי לפתוח חלון תוכנה – פותח את הפאנל בדפדפן');
+      openInBrowser(url);
+    }
+  };
+  proc.on('error', failed);
+  proc.on('exit', () => {
+    // A window that closes within seconds never really opened.
+    if (Date.now() - started < 4000) failed();
+    else if (onClosed) onClosed();
+  });
+}
+
+/** Edge (on every Windows 10/11) for the cleanest app window, else the Chromium that came with the agent. */
+function findAppBrowser() {
+  if (process.platform === 'win32') {
+    for (const base of [process.env['ProgramFiles(x86)'], process.env.ProgramFiles, process.env.LOCALAPPDATA]) {
+      const edge = base && path.join(base, 'Microsoft', 'Edge', 'Application', 'msedge.exe');
+      if (edge && fs.existsSync(edge)) return edge;
+    }
+  }
+  try {
+    const bundled = require('playwright').chromium.executablePath();
+    if (bundled && fs.existsSync(bundled)) return bundled;
+  } catch {
+    // no bundled browser either
+  }
+  return null;
 }
 
 function httpError(status, message) {
