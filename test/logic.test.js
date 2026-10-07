@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 
 const { parsePostAge, isRecent, MINUTE, HOUR, DAY, WEEK } = require('../src/postAge');
 const { PostMatcher } = require('../src/matcher');
-const { canonicalPostUrl, canonicalProfileUrl, fillTemplate } = require('../src/agent');
+const { canonicalPostUrl, canonicalProfileUrl } = require('../src/agent');
 
 const NOW = new Date(2026, 9, 5, 12, 0); // Monday 5 Oct 2026
 const age = (t) => parsePostAge(t, NOW);
@@ -49,16 +49,15 @@ test('unknown timestamps return null', () => {
   assert.equal(age('פיני כהן'), null);
 });
 
-test('4-day limit', () => {
-  assert.equal(isRecent("3 ש'", 4, NOW), true);
-  assert.equal(isRecent('אתמול בשעה 14:00', 4, NOW), true);
-  assert.equal(isRecent("3 י'", 4, NOW), true);
-  assert.equal(isRecent('4 ימים', 4, NOW), true);
-  assert.equal(isRecent("5 י'", 4, NOW), false);
-  assert.equal(isRecent("6 י'", 4, NOW), false);
-  assert.equal(isRecent("1 שב'", 4, NOW), false);
-  assert.equal(isRecent('15 בספטמבר', 4, NOW), false);
-  assert.equal(isRecent('לא ידוע', 4, NOW), false);
+test('3-day limit', () => {
+  assert.equal(isRecent("3 ש'", 3, NOW), true);
+  assert.equal(isRecent('אתמול בשעה 14:00', 3, NOW), true);
+  assert.equal(isRecent("2 י'", 3, NOW), true);
+  assert.equal(isRecent('3 ימים', 3, NOW), true);
+  assert.equal(isRecent("4 י'", 3, NOW), false);
+  assert.equal(isRecent("1 שב'", 3, NOW), false);
+  assert.equal(isRecent('15 בספטמבר', 3, NOW), false);
+  assert.equal(isRecent('לא ידוע', 3, NOW), false);
 });
 
 test('matcher finds DJ requests', () => {
@@ -110,11 +109,6 @@ test('url helpers', () => {
   );
 });
 
-test('message template', () => {
-  assert.equal(fillTemplate('היי {name}! מה נשמע', 'דנה לוי'), 'היי דנה! מה נשמע');
-  assert.equal(fillTemplate('היי {name}! מה נשמע', ''), 'היי! מה נשמע');
-});
-
 const { formatPostMessage, checkWhatsAppSettings, sendWhatsApp } = require('../src/whatsapp');
 
 test('whatsapp message format', () => {
@@ -129,12 +123,11 @@ test('whatsapp message format', () => {
 });
 
 test('whatsapp settings check', () => {
-  assert.equal(checkWhatsAppSettings(undefined), null);
-  assert.equal(checkWhatsAppSettings({ enabled: false }), null);
-  assert.ok(checkWhatsAppSettings({ enabled: true, phone: '', apikey: '' }));
-  assert.equal(checkWhatsAppSettings({ enabled: true, phone: '0501234567' }), null); // web: no apikey needed
-  assert.ok(checkWhatsAppSettings({ enabled: true, method: 'callmebot', phone: '0501234567', apikey: '' }));
-  assert.equal(checkWhatsAppSettings({ enabled: true, method: 'callmebot', phone: '+972501234567', apikey: '123' }), null);
+  assert.ok(checkWhatsAppSettings(undefined));
+  assert.ok(checkWhatsAppSettings({ phone: '', apikey: '' }));
+  assert.equal(checkWhatsAppSettings({ phone: '0501234567' }), null); // web: no apikey needed
+  assert.ok(checkWhatsAppSettings({ method: 'callmebot', phone: '0501234567', apikey: '' }));
+  assert.equal(checkWhatsAppSettings({ method: 'callmebot', phone: '+972501234567', apikey: '123' }), null);
 });
 
 test('whatsapp web phone normalization', () => {

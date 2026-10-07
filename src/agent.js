@@ -1,15 +1,12 @@
 // Facebook DJ agent.
 //
-// Opens a real Chromium window with your own Facebook login, scrolls the feed (and any
-// groups listed in config.yaml), and for every post where someone is looking for a DJ
-// and the post is less than a week old:
-//   1. writes a comment on the post
-//   2. sends the author a Messenger message
+// Opens a real Chromium window with your own Facebook login, scrolls the feed, search
+// results and any groups listed in config.yaml, and sends every recent post where someone
+// is looking for a DJ to your own WhatsApp. It only reads Facebook; it never posts there.
 
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const readline = require('readline');
 const yaml = require('js-yaml');
 const { chromium } = require('playwright');
 
@@ -20,12 +17,6 @@ const { formatPostMessage, sendWhatsApp, checkWhatsAppSettings } = require('./wh
 const { WhatsAppWeb } = require('./whatsappWeb');
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
-
-const COMMENT_BUTTON_LABELS = [
-  'Leave a comment', 'Comment', 'Write a comment', 'השארת תגובה', 'כתיבת תגובה',
-  'הגב', 'תגובה', 'השאר תגובה', 'השאירו תגובה',
-];
-const MESSAGE_BUTTON_NAMES = /^(Message|Send message|הודעה|שליחת הודעה|שלח הודעה)$/;
 
 // ---------- browser-side helpers (run inside the Facebook page) ----------
 
@@ -93,16 +84,6 @@ const rand = (min, max) => min + Math.random() * (max - min);
 const randInt = (min, max) => Math.floor(rand(min, max + 1));
 const humanSleep = ([min, max]) => sleep(rand(min, max) * 1000);
 
-function firstName(full) {
-  return (full || '').trim().split(/\s+/)[0] || '';
-}
-
-function fillTemplate(template, authorName) {
-  const text = template.replaceAll('{name}', firstName(authorName));
-  // If we don't know the name, drop the dangling space: "היי !" -> "היי!"
-  return text.replace(/ +([!,.])/g, '$1').trim();
-}
-
 function canonicalPostUrl(href) {
   const u = new URL(href);
   const keep = ['story_fbid', 'id', 'fbid', 'v']
@@ -125,16 +106,6 @@ function canonicalProfileUrl(href) {
   return `https://www.facebook.com/${first}`;
 }
 
-function numericUserId(profileUrl) {
-  const m = (profileUrl || '').match(/profile\.php\?id=(\d+)/);
-  return m ? m[1] : null;
-}
-
-function ask(question) {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => rl.question(question, (a) => { rl.close(); resolve(a.trim().toLowerCase()); }));
-}
-
 // ---------- logging ----------
 
 let logStream = null;
@@ -148,18 +119,15 @@ function log(...parts) {
 // ---------- the agent ----------
 
 class DJAgent {
-  constructor(cfg, mode) {
+  constructor(cfg, { dryRun = false } = {}) {
     this.cfg = cfg;
-    this.mode = mode;
+    this.dryRun = dryRun;
     this.matcher = new PostMatcher(cfg.include_patterns, cfg.exclude_patterns);
     this.storage = new Storage(cfg.history_file);
-    this.maxAgeMs = Number(cfg.max_post_age_days ?? 4) * DAY;
-    this.commentsSent = 0;
-    this.messagesSent = 0;
+    this.maxAgeMs = Number(cfg.max_post_age_days ?? 3) * DAY;
+    this.whatsapp = cfg.whatsapp || {};
     this.notificationsSent = 0;
-    this.whatsapp = cfg.whatsapp && cfg.whatsapp.enabled ? cfg.whatsapp : null;
     this.seenThisRun = new Set();
-    this.quit = false;
   }
 
   async setupNotifier(context) {
@@ -183,7 +151,7 @@ class DJAgent {
     });
     const page = context.pages()[0] || (await context.newPage());
     try {
-      if (this.whatsapp && (this.mode !== 'dry_run' || testWhatsappOnly)) await this.setupNotifier(context);
+      if (!this.dryRun || testWhatsappOnly) await this.setupNotifier(context);
       if (testWhatsappOnly) {
         await this.notify("✅ בדיקה: סוכן הדיג'יי מחובר לווצאפ שלך");
         log('הודעת בדיקה נשלחה לווצאפ ✔');
@@ -194,15 +162,14 @@ class DJAgent {
       const everyMinutes = Number(this.cfg.run_every_minutes || 0);
       for (;;) {
         for (const source of this.cfg.sources || ['https://www.facebook.com/']) {
-          if (this.quit || this.limitsReached()) break;
-          await this.scanSource(context, page, source);
+          await this.scanSource(page, source);
         }
-        if (this.quit || !everyMinutes) break;
+        if (!everyMinutes) break;
         log(`סבב הסתיים. נשלחו לווצאפ עד עכשיו: ${this.notificationsSent}. סבב הבא בעוד ${everyMinutes} דקות (Ctrl+C לעצירה)`);
         await sleep(everyMinutes * 60 * 1000);
       }
     } finally {
-      log(`סיום. ווצאפ: ${this.notificationsSent}, תגובות: ${this.commentsSent}, הודעות מסנג'ר: ${this.messagesSent}`);
+      log(`סיום. נשלחו לווצאפ: ${this.notificationsSent}`);
       await context.close();
     }
   }
@@ -228,16 +195,9 @@ class DJAgent {
     throw new Error('לא בוצעה התחברות תוך 10 דקות.');
   }
 
-  limitsReached() {
-    if (this.mode === 'dry_run' || this.whatsapp) return false;
-    const commentsDone = !this.cfg.send_comment || this.commentsSent >= this.cfg.max_comments_per_run;
-    const messagesDone = !this.cfg.send_messenger || this.messagesSent >= this.cfg.max_messages_per_run;
-    return commentsDone && messagesDone;
-  }
-
   // ---------- scanning ----------
 
-  async scanSource(context, page, url) {
+  async scanSource(page, url) {
     log(`סורק: ${url}`);
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await sleep(4000);
@@ -248,9 +208,8 @@ class DJAgent {
       totalPosts += ids.length;
       if ((s + 1) % 10 === 0) log(`   גלילה ${s + 1}/${scrolls} – נסרקו ${totalPosts} פוסטים`);
       for (const id of ids) {
-        if (this.quit || this.limitsReached()) return;
         try {
-          await this.handlePost(context, page, page.locator(`[data-djbot-id="${id}"]`));
+          await this.handlePost(page, page.locator(`[data-djbot-id="${id}"]`));
         } catch (e) {
           // One broken post must not stop the run.
           log(`שגיאה בטיפול בפוסט: ${e.message.split('\n')[0]}`);
@@ -288,7 +247,6 @@ class DJAgent {
     }
 
     return {
-      locator: el,
       key,
       url,
       text,
@@ -311,7 +269,7 @@ class DJAgent {
     }
   }
 
-  async handlePost(context, page, el) {
+  async handlePost(page, el) {
     // Facebook removes/hides posts that scrolled far away, so read the text straight from
     // the DOM (no visibility needed) and skip posts that are already gone.
     if ((await el.count()) === 0) return;
@@ -342,67 +300,19 @@ class DJAgent {
     const ageDesc = `${post.ageText} (~${describeAge(age)})`;
     this.printPost(post, matched, ageDesc);
 
-    if (this.whatsapp) {
-      if (this.mode === 'dry_run') {
-        log('   [dry_run] היה נשלח אליך לווצאפ');
-      } else {
-        try {
-          await this.notify(formatPostMessage(post, ageDesc));
-          this.notificationsSent++;
-          this.storage.record(post.key, post.authorUrl, 'notify', post.text);
-          log('   ✔ נשלח אליך לווצאפ');
-        } catch (e) {
-          log(`   ✘ שליחה לווצאפ נכשלה: ${e.message.split('\n')[0]}`);
-        }
-        await page.bringToFront();
-      }
-    }
-    if (!this.cfg.send_comment && !this.cfg.send_messenger) return;
-
-    let doComment = !!this.cfg.send_comment && this.commentsSent < this.cfg.max_comments_per_run;
-    let doMessage =
-      !!this.cfg.send_messenger &&
-      this.messagesSent < this.cfg.max_messages_per_run &&
-      !!post.authorUrl &&
-      !this.storage.authorMessagedRecently(post.authorUrl, this.cfg.dont_message_same_person_days ?? 30);
-
-    if (this.mode === 'dry_run') {
-      log(`   [dry_run] היה נשלח: תגובה=${doComment ? 'כן' : 'לא'}, הודעה=${doMessage ? 'כן' : 'לא'}`);
+    if (this.dryRun) {
+      log('   [בדיקה] היה נשלח אליך לווצאפ');
       return;
     }
-
-    if (this.mode === 'confirm') {
-      const answer = await this.askUser(doComment, doMessage);
-      if (answer === 'q') {
-        this.quit = true;
-        return;
-      }
-      if (answer === 'n') {
-        this.storage.record(post.key, post.authorUrl, 'skip', post.text);
-        return;
-      }
-      doComment = doComment && (answer === 'y' || answer === 'c');
-      doMessage = doMessage && (answer === 'y' || answer === 'm');
+    try {
+      await this.notify(formatPostMessage(post, ageDesc));
+      this.notificationsSent++;
+      this.storage.record(post.key, post.authorUrl, 'notify', post.text);
+      log('   ✔ נשלח אליך לווצאפ');
+    } catch (e) {
+      log(`   ✘ שליחה לווצאפ נכשלה: ${e.message.split('\n')[0]}`);
     }
-
-    const actionDelay = this.cfg.delay_between_actions || [45, 120];
-    if (doComment) {
-      if (await this.postComment(page, post)) {
-        this.commentsSent++;
-        this.storage.record(post.key, post.authorUrl, 'comment', post.text);
-        log('   ✔ תגובה נשלחה');
-      }
-      await humanSleep(actionDelay);
-    }
-    if (doMessage) {
-      if (await this.sendMessage(context, post)) {
-        this.messagesSent++;
-        this.storage.record(post.key, post.authorUrl, 'message', post.text);
-        log("   ✔ הודעה במסנג'ר נשלחה");
-      }
-      await humanSleep(actionDelay);
-    }
-    if (!doComment && !doMessage) this.storage.record(post.key, post.authorUrl, 'skip', post.text);
+    await page.bringToFront();
   }
 
   printPost(post, matched, ageDesc) {
@@ -415,95 +325,6 @@ class DJAgent {
     if (post.url) console.log(`   ${post.url}`);
     console.log(bar);
   }
-
-  async askUser(doComment, doMessage) {
-    let options = 'y=הכל';
-    if (doComment) options += ', c=רק תגובה';
-    if (doMessage) options += ', m=רק הודעה';
-    options += ', n=דלג, q=יציאה';
-    for (;;) {
-      const answer = await ask(`   לשלוח? (${options}): `);
-      if (['y', 'c', 'm', 'n', 'q'].includes(answer)) return answer;
-    }
-  }
-
-  // ---------- actions ----------
-
-  async humanType(page, text) {
-    // Newlines become Shift+Enter so the message isn't sent early.
-    const lines = text.trim().split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      await page.keyboard.type(lines[i], { delay: randInt(35, 110) });
-      if (i < lines.length - 1) await page.keyboard.press('Shift+Enter');
-    }
-  }
-
-  async postComment(page, post) {
-    const text = fillTemplate(this.cfg.comment_text, post.authorName);
-    const el = post.locator;
-    try {
-      await el.evaluate((e) => e.scrollIntoView({ block: 'center' }), null, { timeout: 3000 });
-      await sleep(1000);
-      let box = el.locator('div[role="textbox"][contenteditable="true"]').first();
-      let openedDialog = false;
-      if (!(await box.isVisible())) {
-        const selector = COMMENT_BUTTON_LABELS.map((l) => `[role="button"][aria-label="${l}"]`).join(', ');
-        await el.locator(selector).first().click({ timeout: 5000 });
-        await sleep(2500);
-        box = el.locator('div[role="textbox"][contenteditable="true"]').first();
-        if (!(await box.isVisible())) {
-          // Newer Facebook opens the post in a dialog.
-          box = page.locator('[role="dialog"] div[role="textbox"][contenteditable="true"]').last();
-          openedDialog = true;
-        }
-      }
-      await box.click({ timeout: 5000 });
-      await sleep(rand(500, 1500));
-      await this.humanType(page, text);
-      await sleep(rand(800, 2000));
-      await page.keyboard.press('Enter');
-      await sleep(3000);
-      if (openedDialog) {
-        await page.keyboard.press('Escape');
-        await sleep(1000);
-      }
-      return true;
-    } catch (e) {
-      log(`   ✘ לא הצלחתי להגיב על הפוסט: ${e.message.split('\n')[0]}`);
-      await page.keyboard.press('Escape').catch(() => {});
-      return false;
-    }
-  }
-
-  async sendMessage(context, post) {
-    const text = fillTemplate(this.cfg.messenger_text, post.authorName);
-    const tab = await context.newPage();
-    try {
-      const uid = numericUserId(post.authorUrl);
-      if (uid) {
-        await tab.goto(`https://www.facebook.com/messages/t/${uid}`, { waitUntil: 'domcontentloaded' });
-        await sleep(5000);
-      } else {
-        await tab.goto(post.authorUrl, { waitUntil: 'domcontentloaded' });
-        await sleep(4000);
-        await tab.getByRole('button', { name: MESSAGE_BUTTON_NAMES }).first().click({ timeout: 8000 });
-        await sleep(4000);
-      }
-      const box = tab.locator('div[role="textbox"][contenteditable="true"]').last();
-      await box.click({ timeout: 8000 });
-      await sleep(rand(500, 1500));
-      await this.humanType(tab, text);
-      await sleep(rand(800, 2000));
-      await tab.keyboard.press('Enter');
-      await sleep(3000);
-      return true;
-    } catch (e) {
-      log(`   ✘ לא הצלחתי לשלוח הודעה ל-${post.authorName}: ${e.message.split('\n')[0]}`);
-      return false;
-    } finally {
-      await tab.close();
-    }
-  }
 }
 
 // ---------- entry point ----------
@@ -513,21 +334,15 @@ function loadConfig(file) {
   const base = path.dirname(path.resolve(file));
   cfg.browser_profile_dir = path.resolve(base, cfg.browser_profile_dir || './browser_profile');
   cfg.history_file = path.resolve(base, cfg.history_file || './history.json');
-  cfg.max_comments_per_run ??= 5;
-  cfg.max_messages_per_run ??= 5;
   return cfg;
 }
 
 function parseArgs(argv) {
-  const args = { config: 'config.yaml', mode: null };
+  const args = { config: 'config.yaml', dryRun: false, testWhatsapp: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--config') args.config = argv[++i];
-    else if (argv[i] === '--mode') args.mode = argv[++i];
-    else if (argv[i].startsWith('--mode=')) args.mode = argv[i].slice(7);
+    else if (argv[i] === '--dry-run') args.dryRun = true;
     else if (argv[i] === '--test-whatsapp') args.testWhatsapp = true;
-  }
-  if (args.mode && !['dry_run', 'confirm', 'auto'].includes(args.mode)) {
-    throw new Error(`mode לא חוקי: ${args.mode} (אפשר: dry_run / confirm / auto)`);
   }
   return args;
 }
@@ -535,15 +350,13 @@ function parseArgs(argv) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const cfg = loadConfig(args.config);
-  const mode = args.mode || cfg.mode || 'confirm';
-  const problem = checkWhatsAppSettings(cfg.whatsapp);
-  if (problem) throw new Error(problem);
-  if (args.testWhatsapp && !(cfg.whatsapp && cfg.whatsapp.enabled)) {
-    throw new Error('ווצאפ כבוי ב-config.yaml (whatsapp.enabled)');
+  if (!args.dryRun || args.testWhatsapp) {
+    const problem = checkWhatsAppSettings(cfg.whatsapp);
+    if (problem) throw new Error(problem);
   }
   logStream = fs.createWriteStream(path.resolve(path.dirname(path.resolve(args.config)), 'dj_agent.log'), { flags: 'a' });
-  log(`מצב עבודה: ${mode} | גיל פוסט מקסימלי: ${cfg.max_post_age_days ?? 4} ימים`);
-  await new DJAgent(cfg, mode).run({ testWhatsappOnly: !!args.testWhatsapp });
+  log(`${args.dryRun ? 'מצב בדיקה (לא שולח לווצאפ) | ' : ''}גיל פוסט מקסימלי: ${cfg.max_post_age_days ?? 3} ימים`);
+  await new DJAgent(cfg, { dryRun: args.dryRun }).run({ testWhatsappOnly: args.testWhatsapp });
 }
 
-module.exports = { main, fillTemplate, canonicalPostUrl, canonicalProfileUrl, numericUserId, jsNewPosts, jsPostInfo, DJAgent, POST_SELECTOR };
+module.exports = { main, canonicalPostUrl, canonicalProfileUrl, jsNewPosts, jsPostInfo, DJAgent, POST_SELECTOR };

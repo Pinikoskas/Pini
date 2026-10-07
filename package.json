@@ -6,7 +6,7 @@
   "private": true,
   "scripts": {
     "start": "node index.js",
-    "dry": "node index.js --mode dry_run",
+    "dry": "node index.js --dry-run",
     "test": "node --test",
     "postinstall": "playwright install chromium"
   },
