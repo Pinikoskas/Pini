@@ -15,6 +15,7 @@ const { parsePostAge, describeAge, DAY } = require('./postAge');
 const { Storage } = require('./storage');
 const { formatPostMessage, checkWhatsAppSettings } = require('./whatsapp');
 const { WhatsAppWeb } = require('./whatsappWeb');
+const { loadGroupsFile, addGroupsToFile, collectJoinedGroups } = require('./groups');
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
 const OLD_POSTS_TO_STOP = 3;
@@ -116,7 +117,8 @@ function buildSources(cfg) {
   for (const q of cfg.searches || []) {
     sources.push({ label: `חיפוש "${q}"`, url: searchUrl(q), maxScrolls: cap, untilOld: true });
   }
-  for (const g of cfg.groups || []) {
+  const groups = [...new Set([...(cfg.groups || []), ...loadGroupsFile(cfg.groups_file)])];
+  for (const g of groups) {
     sources.push({ label: `קבוצה ${g}`, url: groupUrl(g), maxScrolls: cap, untilOld: true });
   }
   return sources;
@@ -176,7 +178,7 @@ class DJAgent {
     this.notify = (text) => wa.send(text);
   }
 
-  async run({ testWhatsappOnly = false } = {}) {
+  async run({ testWhatsappOnly = false, importGroupsOnly = false } = {}) {
     const context = await chromium.launchPersistentContext(this.cfg.browser_profile_dir, {
       headless: false,
       locale: 'he-IL',
@@ -185,6 +187,14 @@ class DJAgent {
     });
     const page = context.pages()[0] || (await context.newPage());
     try {
+      if (importGroupsOnly) {
+        await this.ensureLoggedIn(page);
+        log('אוסף את הקבוצות שאתה חבר בהן...');
+        const groups = await collectJoinedGroups(page, { log, sleep });
+        const added = addGroupsToFile(this.cfg.groups_file, groups);
+        log(`נמצאו ${groups.length} קבוצות, ${added} חדשות נוספו לקובץ ${this.cfg.groups_file}`);
+        return;
+      }
       if (!this.dryRun || testWhatsappOnly) await this.setupNotifier(context);
       if (testWhatsappOnly) {
         await this.notify("✅ בדיקה: סוכן הדיג'יי מחובר לווצאפ שלך");
@@ -390,15 +400,17 @@ function loadConfig(file) {
   const base = path.dirname(path.resolve(file));
   cfg.browser_profile_dir = path.resolve(base, cfg.browser_profile_dir || './browser_profile');
   cfg.history_file = path.resolve(base, cfg.history_file || './history.json');
+  cfg.groups_file = path.resolve(base, cfg.groups_file || './groups.txt');
   return cfg;
 }
 
 function parseArgs(argv) {
-  const args = { config: 'config.yaml', dryRun: false, testWhatsapp: false };
+  const args = { config: 'config.yaml', dryRun: false, testWhatsapp: false, importGroups: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--config') args.config = argv[++i];
     else if (argv[i] === '--dry-run') args.dryRun = true;
     else if (argv[i] === '--test-whatsapp') args.testWhatsapp = true;
+    else if (argv[i] === '--import-groups') args.importGroups = true;
   }
   return args;
 }
@@ -406,13 +418,13 @@ function parseArgs(argv) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const cfg = loadConfig(args.config);
-  if (!args.dryRun || args.testWhatsapp) {
+  if ((!args.dryRun && !args.importGroups) || args.testWhatsapp) {
     const problem = checkWhatsAppSettings(cfg.whatsapp);
     if (problem) throw new Error(problem);
   }
   logStream = fs.createWriteStream(path.resolve(path.dirname(path.resolve(args.config)), 'dj_agent.log'), { flags: 'a' });
   log(`${args.dryRun ? 'מצב בדיקה (לא שולח לווצאפ) | ' : ''}גיל פוסט מקסימלי: ${cfg.max_post_age_days ?? 3} ימים`);
-  await new DJAgent(cfg, { dryRun: args.dryRun }).run({ testWhatsappOnly: args.testWhatsapp });
+  await new DJAgent(cfg, { dryRun: args.dryRun }).run({ testWhatsappOnly: args.testWhatsapp, importGroupsOnly: args.importGroups });
 }
 
 module.exports = { main, canonicalPostUrl, canonicalProfileUrl, buildSources, searchUrl, groupUrl, jsNewPosts, jsPostInfo, DJAgent, POST_SELECTOR };

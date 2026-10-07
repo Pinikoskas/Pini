@@ -156,3 +156,21 @@ test('sources: feed by scroll count, searches and groups newest-first until old'
   assert.equal(new URL(groupUrl('https://www.facebook.com/groups/123/')).searchParams.get('sorting_setting'), 'CHRONOLOGICAL');
   assert.equal(buildSources({ feed_scrolls: 0 }).length, 0);
 });
+
+test('groups.txt: import, switch off with #, re-import keeps it off', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { addGroupsToFile, loadGroupsFile } = require('../src/groups');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djgroups-')), 'groups.txt');
+
+  assert.equal(addGroupsToFile(file, [{ id: '111', name: 'חתונות בצפון' }, { id: 'bar.mitzva', name: 'בר מצווה' }]), 2);
+  assert.deepEqual(loadGroupsFile(file), ['https://www.facebook.com/groups/111/', 'https://www.facebook.com/groups/bar.mitzva/']);
+  assert.match(fs.readFileSync(file, 'utf8'), /groups\/111\/ +# חתונות בצפון/);
+
+  // Switch one off, then import again with one new group.
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('https://www.facebook.com/groups/111/', '# https://www.facebook.com/groups/111/'));
+  assert.equal(addGroupsToFile(file, [{ id: '111', name: 'חתונות בצפון' }, { id: '222', name: 'אירועים' }]), 1);
+  assert.deepEqual(loadGroupsFile(file), ['https://www.facebook.com/groups/bar.mitzva/', 'https://www.facebook.com/groups/222/']);
+  assert.deepEqual(loadGroupsFile(path.join(path.dirname(file), 'missing.txt')), []);
+});

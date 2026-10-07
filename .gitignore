@@ -2,3 +2,4 @@ node_modules/
 browser_profile/
 history.json
 *.log
+groups.txt
