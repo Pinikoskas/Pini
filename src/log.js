@@ -25,4 +25,10 @@ function log(...parts) {
   events.emit('log', entry);
 }
 
-module.exports = { log, events, recentLogs: () => recent.slice(), setLogFile };
+/** Empties the panel's log view (dj_agent.log on disk is kept). */
+function clearRecent() {
+  recent.length = 0;
+  events.emit('cleared');
+}
+
+module.exports = { log, events, recentLogs: () => recent.slice(), clearRecent, setLogFile };

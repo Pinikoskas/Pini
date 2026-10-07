@@ -75,21 +75,48 @@ function setGroupsEnabled(file, changes) {
 class GroupsLastSeen {
   constructor(file) {
     this.file = file;
+    this.reload();
+  }
+
+  reload() {
     this.data = {};
     try {
-      if (file && fs.existsSync(file)) this.data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (this.file && fs.existsSync(this.file)) this.data = JSON.parse(fs.readFileSync(this.file, 'utf8'));
     } catch {
       this.data = {};
     }
+  }
+
+  write() {
+    if (this.file) fs.writeFileSync(this.file, JSON.stringify(this.data, null, 2), 'utf8');
   }
 
   newestPost(groupId) {
     return (this.data[groupId] && this.data[groupId].newest_post) || null;
   }
 
+  // Re-reads the file first, so a bookmark deleted from the control panel isn't written back.
   save(groupId, name, postKey) {
+    this.reload();
     this.data[groupId] = { name: name || '', newest_post: postKey, checked_at: new Date().toISOString() };
-    if (this.file) fs.writeFileSync(this.file, JSON.stringify(this.data, null, 2), 'utf8');
+    this.write();
+  }
+
+  /** All bookmarks: [{ id, name, newest_post, checked_at }], most recently checked first. */
+  list() {
+    return Object.entries(this.data)
+      .map(([id, v]) => ({ id, ...v }))
+      .sort((a, b) => String(b.checked_at).localeCompare(String(a.checked_at)));
+  }
+
+  /** Deletes bookmarks (those groups are scanned from scratch next round). */
+  remove({ ids = [], all = false } = {}) {
+    this.reload();
+    const before = Object.keys(this.data).length;
+    if (all) this.data = {};
+    else for (const id of ids) delete this.data[id];
+    this.write();
+    return before - Object.keys(this.data).length;
   }
 }
 
