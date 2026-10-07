@@ -8,10 +8,10 @@ const { exec, spawn } = require('child_process');
 
 const { DJAgent } = require('./agent');
 const { loadConfig, editableValues, updateConfigValues } = require('./configFile');
-const { readAllGroups, setGroupsEnabled } = require('./groups');
+const { readAllGroups, setGroupsEnabled, GroupsLastSeen } = require('./groups');
 const { checkWhatsAppSettings } = require('./whatsapp');
 const { Storage } = require('./storage');
-const { log, events, recentLogs } = require('./log');
+const { log, events, recentLogs, clearRecent } = require('./log');
 
 const PAGE = path.join(__dirname, 'panel.html');
 const ICON = path.join(__dirname, '..', 'assets', 'icon.png');
@@ -35,9 +35,17 @@ function startPanel({ configPath, port }) {
       settings: editableValues(cfg),
       groups: readAllGroups(cfg.groups_file),
       leads: new Storage(cfg.history_file).recentLeads(30),
+      bookmarks: bookmarks(cfg),
       logs: recentLogs(),
     };
   }
+
+  // The last post saved per group, with the group's name from groups.txt when it's missing.
+  function bookmarks(cfg) {
+    const names = Object.fromEntries(readAllGroups(cfg.groups_file).map((g) => [g.id, g.name]));
+    return new GroupsLastSeen(cfg.groups_last_seen_file).list().map((b) => ({ ...b, name: b.name || names[b.id] || b.id }));
+  }
+  const later = () => (running() ? ' – יחול מהסבב הבא' : '');
 
   const actions = {
     'GET /api/state': () => snapshot(),
@@ -74,6 +82,25 @@ function startPanel({ configPath, port }) {
       const off = Object.keys(changes || {}).length - on;
       log(`⚙ קבוצות עודכנו (${on ? `${on} הופעלו` : ''}${on && off ? ', ' : ''}${off ? `${off} כובו` : ''})${running() ? ' – יחול מהסבב הבא' : ''}`);
       return { ok: true, groups: readAllGroups(cfg.groups_file) };
+    },
+
+    'POST /api/logs/clear': () => {
+      clearRecent();
+      return { ok: true };
+    },
+
+    'POST /api/bookmarks/delete': ({ ids, all }) => {
+      const cfg = loadConfig(configPath);
+      const n = new GroupsLastSeen(cfg.groups_last_seen_file).remove({ ids: ids || [], all: !!all });
+      log(`🗑 נמחקו ${n} סימונים של פוסט אחרון – הקבוצות האלה ייסרקו מההתחלה${later()}`);
+      return { ok: true, bookmarks: bookmarks(cfg) };
+    },
+
+    'POST /api/leads/delete': ({ postKeys, all }) => {
+      const cfg = loadConfig(configPath);
+      const n = new Storage(cfg.history_file).forget({ postKeys: postKeys || [], all: !!all });
+      log(`🗑 ${all ? 'היסטוריית השליחות נמחקה' : `נמחקו ${n} פוסטים מההיסטוריה`} – אם הם עדיין חדשים, הם יישלחו שוב${later()}`);
+      return { ok: true, leads: new Storage(cfg.history_file).recentLeads(30) };
     },
 
     'POST /api/import-groups': () => {
@@ -120,7 +147,7 @@ function startPanel({ configPath, port }) {
   function streamEvents(req, res) {
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
     const send = (type) => (data) => res.write(`event: ${type}\ndata: ${JSON.stringify(data ?? {})}\n\n`);
-    const handlers = { log: send('log'), status: send('status'), lead: send('lead'), groups: send('groups') };
+    const handlers = { log: send('log'), status: send('status'), lead: send('lead'), groups: send('groups'), cleared: send('cleared'), bookmarks: send('bookmarks') };
     for (const [type, fn] of Object.entries(handlers)) events.on(type, fn);
     const ping = setInterval(() => res.write(': ping\n\n'), 25000);
     req.on('close', () => {

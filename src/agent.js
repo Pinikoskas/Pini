@@ -281,6 +281,8 @@ class DJAgent {
         // Settings and groups changed since the last round take effect now.
         const phoneBefore = this.whatsapp.phone;
         this.reloadConfig();
+        this.storage.reload(); // history / bookmarks may have been cleared from the panel
+        this.lastSeen.reload();
         if (this.wa && this.whatsapp.phone !== phoneBefore) {
           log(`מספר הטלפון השתנה – מתחבר לצ'אט החדש בווצאפ`);
           await this.wa.setPhone(this.whatsapp.phone);
@@ -351,6 +353,7 @@ class DJAgent {
     // WhatsApp send failed here (then the next scan must reach that post again).
     if (source.groupId && newest && !this.dryRun && !this.stopRequested && this.sendFailures === failuresBefore) {
       this.lastSeen.save(source.groupId, source.groupName, newest.key);
+      events.emit('bookmarks');
     }
   }
 
