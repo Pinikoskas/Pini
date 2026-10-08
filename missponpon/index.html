@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מיס פונפון | מספרה וסלון טיפוח לכלבים וחתולים</title>
+<meta name="description" content="מיס פונפון – מספרה וסלון טיפוח לכלבים וחתולים, רחוב מוהליבר 1. תספורת, רחצה, סירוק וגזירת ציפורניים. קביעת תור בטלפון 053-234-6979 או בוואטסאפ.">
+<meta name="theme-color" content="#3d1f4a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --plum: #3d1f4a;
+    --plum-soft: #5a3368;
+    --pink: #f27ba3;
+    --pink-soft: #fde4ec;
+    --cream: #fff8f1;
+    --sand: #f6ebdf;
+    --ink: #2a1d2f;
+    --muted: #6d5f72;
+    --white: #ffffff;
+    --radius: 22px;
+    --shadow: 0 10px 30px rgba(61, 31, 74, .10);
+    --max: 1120px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: "Rubik", system-ui, sans-serif;
+    background: var(--cream);
+    color: var(--ink);
+    line-height: 1.65;
+    font-size: 17px;
+  }
+  a { color: inherit; text-decoration: none; }
+  img, svg { display: block; max-width: 100%; }
+  .wrap { max-width: var(--max); margin-inline: auto; padding-inline: 20px; }
+  section { padding-block: 88px; }
+  .eyebrow {
+    display: inline-block; font-size: 14px; font-weight: 700; letter-spacing: .04em;
+    color: var(--pink); background: var(--pink-soft); padding: 6px 14px; border-radius: 99px;
+    margin-bottom: 14px;
+  }
+  h1, h2, h3 { line-height: 1.2; color: var(--plum); }
+  h2 { font-size: clamp(28px, 4vw, 40px); font-weight: 800; margin-bottom: 14px; }
+  .lead { color: var(--muted); font-size: 18px; max-width: 620px; }
+  .center { text-align: center; }
+  .center .lead { margin-inline: auto; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px; justify-content: center;
+    font-weight: 700; font-size: 17px; padding: 15px 26px; border-radius: 99px;
+    transition: transform .15s ease, box-shadow .15s ease, background .15s;
+    cursor: pointer; border: 2px solid transparent;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+  .btn-primary { background: var(--pink); color: var(--white); box-shadow: 0 8px 22px rgba(242, 123, 163, .45); }
+  .btn-primary:hover { background: #ec5f8e; }
+  .btn-ghost { border-color: var(--plum); color: var(--plum); background: transparent; }
+  .btn-ghost:hover { background: var(--plum); color: var(--white); }
+  .btn-wa { background: #25d366; color: #fff; box-shadow: 0 8px 22px rgba(37, 211, 102, .35); }
+
+  /* Header */
+  header {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(255, 248, 241, .88); backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(61, 31, 74, .08);
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; height: 72px; gap: 20px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 22px; color: var(--plum); }
+  .logo-mark {
+    width: 42px; height: 42px; border-radius: 50%; background: var(--pink);
+    display: grid; place-items: center; color: #fff;
+  }
+  .logo-mark svg { width: 24px; height: 24px; }
+  .logo small { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-top: -2px; }
+  .nav-links { display: flex; gap: 28px; font-weight: 500; color: var(--plum-soft); }
+  .nav-links a:hover { color: var(--pink); }
+  .nav .btn { padding: 10px 20px; font-size: 15px; }
+
+  /* Hero */
+  .hero { padding-block: 64px 96px; position: relative; overflow: hidden; }
+  .hero-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 48px; align-items: center; }
+  .hero h1 { font-size: clamp(36px, 6vw, 62px); font-weight: 800; margin-bottom: 20px; }
+  .hero h1 em { font-style: normal; color: var(--pink); position: relative; white-space: nowrap; }
+  .hero h1 em::after {
+    content: ""; position: absolute; inset-inline: 0; bottom: 4px; height: 12px;
+    background: var(--pink-soft); z-index: -1; border-radius: 6px;
+  }
+  .hero .lead { margin-bottom: 32px; }
+  .hero-ctas { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 34px; }
+  .rating { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 15px; }
+  .stars { display: flex; gap: 2px; color: #f5b301; }
+  .stars svg { width: 18px; height: 18px; }
+  .rating strong { color: var(--plum); font-size: 18px; }
+
+  .hero-art { position: relative; aspect-ratio: 1; max-width: 460px; justify-self: center; width: 100%; }
+  .blob { position: absolute; inset: 0; background: var(--pink-soft); border-radius: 46% 54% 52% 48% / 52% 44% 56% 48%; }
+  .hero-art .dog { position: absolute; inset: 8%; }
+  .bubble {
+    position: absolute; background: var(--white); border-radius: 16px; padding: 12px 16px;
+    box-shadow: var(--shadow); font-weight: 700; font-size: 15px; color: var(--plum);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .bubble span { font-size: 22px; }
+  .bubble.b1 { top: 8%; inset-inline-start: -4%; }
+  .bubble.b2 { bottom: 10%; inset-inline-end: -6%; }
+
+  /* Trust strip */
+  .strip { background: var(--plum); color: #fff; padding-block: 26px; }
+  .strip-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; text-align: center; }
+  .strip b { display: block; font-size: 22px; color: var(--pink); }
+  .strip small { opacity: .85; font-size: 15px; }
+
+  /* Services */
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 48px; }
+  .card {
+    background: var(--white); border-radius: var(--radius); padding: 30px 26px;
+    box-shadow: var(--shadow); transition: transform .2s;
+  }
+  .card:hover { transform: translateY(-4px); }
+  .card .ic {
+    width: 56px; height: 56px; border-radius: 16px; background: var(--pink-soft);
+    display: grid; place-items: center; font-size: 28px; margin-bottom: 18px;
+  }
+  .card h3 { font-size: 21px; margin-bottom: 8px; }
+  .card p { color: var(--muted); font-size: 16px; }
+  .price-note {
+    margin-top: 32px; background: var(--sand); border-radius: var(--radius); padding: 22px 26px;
+    display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+  }
+  .price-note p { color: var(--plum); font-weight: 500; }
+
+  /* Steps */
+  .steps-bg { background: var(--white); }
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 48px; counter-reset: s; }
+  .step { position: relative; padding-top: 64px; }
+  .step::before {
+    counter-increment: s; content: counter(s);
+    position: absolute; top: 0; inset-inline-start: 0;
+    width: 48px; height: 48px; border-radius: 50%; background: var(--plum); color: #fff;
+    display: grid; place-items: center; font-weight: 800; font-size: 20px;
+  }
+  .step h3 { font-size: 19px; margin-bottom: 6px; }
+  .step p { color: var(--muted); font-size: 16px; }
+
+  /* Dogs & cats split */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 48px; }
+  .pet {
+    border-radius: var(--radius); padding: 36px; position: relative; overflow: hidden; min-height: 260px;
+  }
+  .pet.dog-c { background: var(--plum); color: #fff; }
+  .pet.cat-c { background: var(--pink-soft); }
+  .pet h3 { font-size: 28px; margin-bottom: 10px; }
+  .pet.dog-c h3 { color: #fff; }
+  .pet ul { list-style: none; display: grid; gap: 8px; max-width: 70%; }
+  .pet li::before { content: "✓"; color: var(--pink); font-weight: 800; margin-inline-end: 8px; }
+  .pet .emoji { position: absolute; font-size: 120px; bottom: -14px; inset-inline-end: 14px; opacity: .9; line-height: 1; }
+
+  /* FAQ */
+  .faq { max-width: 780px; margin: 48px auto 0; display: grid; gap: 14px; }
+  details {
+    background: var(--white); border-radius: 18px; padding: 20px 24px; box-shadow: var(--shadow);
+  }
+  summary {
+    cursor: pointer; font-weight: 700; color: var(--plum); font-size: 18px; list-style: none;
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "+"; font-size: 26px; color: var(--pink); transition: transform .2s; }
+  details[open] summary::after { transform: rotate(45deg); }
+  details p { color: var(--muted); margin-top: 12px; }
+
+  /* Contact */
+  .contact { background: var(--plum); color: #fff; border-radius: 32px; padding: 56px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 40px; align-items: center; }
+  .contact h2 { color: #fff; }
+  .contact .lead { color: rgba(255,255,255,.8); margin-bottom: 28px; }
+  .contact .btns { display: flex; flex-wrap: wrap; gap: 12px; }
+  .contact .btn-ghost { border-color: #fff; color: #fff; }
+  .contact .btn-ghost:hover { background: #fff; color: var(--plum); }
+  .info { display: grid; gap: 14px; }
+  .info a, .info div {
+    display: flex; align-items: center; gap: 14px; background: rgba(255,255,255,.08);
+    padding: 16px 18px; border-radius: 16px; transition: background .15s;
+  }
+  .info a:hover { background: rgba(255,255,255,.16); }
+  .info .i { font-size: 22px; width: 32px; text-align: center; }
+  .info small { display: block; opacity: .7; font-size: 13px; }
+  .info b { font-weight: 500; font-size: 17px; }
+
+  footer { padding-block: 36px; text-align: center; color: var(--muted); font-size: 14px; }
+
+  /* Mobile call bar */
+  .mobile-bar { display: none; }
+
+  @media (max-width: 900px) {
+    section { padding-block: 64px; }
+    .nav-links { display: none; }
+    .hero-grid, .contact { grid-template-columns: 1fr; }
+    .hero { padding-top: 32px; }
+    .hero-art { max-width: 340px; order: -1; }
+    .cards { grid-template-columns: 1fr 1fr; }
+    .steps { grid-template-columns: 1fr 1fr; }
+    .strip-grid { grid-template-columns: 1fr 1fr; }
+    .split { grid-template-columns: 1fr; }
+    .contact { padding: 36px 24px; }
+  }
+  @media (max-width: 600px) {
+    body { padding-bottom: 76px; }
+    .cards, .steps { grid-template-columns: 1fr; }
+    .nav .btn { display: none; }
+    .hero-ctas .btn { flex: 1 1 100%; }
+    .bubble { font-size: 13px; padding: 8px 12px; }
+    .bubble.b1 { inset-inline-start: 0; }
+    .bubble.b2 { inset-inline-end: 0; }
+    .pet ul { max-width: 100%; }
+    .pet .emoji { font-size: 80px; opacity: .25; }
+    .mobile-bar {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      position: fixed; bottom: 0; inset-inline: 0; z-index: 60; padding: 10px 12px;
+      background: rgba(255,248,241,.96); backdrop-filter: blur(8px);
+      border-top: 1px solid rgba(61,31,74,.1);
+    }
+    .mobile-bar .btn { padding: 13px 10px; font-size: 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-phone" viewBox="0 0 24 24"><path fill="currentColor" d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1z"/></symbol>
+  <symbol id="i-wa" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .2-3.3-.7a11.7 11.7 0 0 1-4.6-4.1c-.4-.5-1.1-1.6-1.1-3s.7-2.1 1-2.4c.3-.3.6-.4.8-.4h.6c.2 0 .4 0 .6.5l.9 2.1c.1.2.1.4 0 .6l-.3.5-.5.5c-.1.2-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.4 2.4 1.5.3.2.5.1.6-.1l.9-1c.2-.3.4-.2.6-.1l2 .9c.3.2.5.2.6.4.1.1.1.7-.1 1.3z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" d="m12 2 3 6.6 7.2.7-5.4 4.8 1.6 7.1L12 17.5 5.6 21.2l1.6-7.1L1.8 9.3 9 8.6z"/></symbol>
+  <symbol id="i-paw" viewBox="0 0 24 24"><path fill="currentColor" d="M12 11c-3.3 0-6 3.6-6 6.3C6 19.3 7.6 20 9 20c1.3 0 2-.6 3-.6s1.7.6 3 .6c1.4 0 3-.7 3-2.7 0-2.7-2.7-6.3-6-6.3zM5 10.5a2 2.5 0 1 0 0-5 2 2.5 0 0 0 0 5zm14 0a2 2.5 0 1 0 0-5 2 2.5 0 0 0 0 5zM9 7.5a2 2.7 0 1 0 0-5.4 2 2.7 0 0 0 0 5.4zm6 0a2 2.7 0 1 0 0-5.4 2 2.7 0 0 0 0 5.4z"/></symbol>
+</svg>
+
+<header>
+  <div class="wrap nav">
+    <a href="#top" class="logo" aria-label="מיס פונפון – לדף הבית">
+      <span class="logo-mark"><svg><use href="#i-paw"/></svg></span>
+      <span>מיס פונפון<small>סלון טיפוח לכלבים וחתולים</small></span>
+    </a>
+    <nav class="nav-links" aria-label="ניווט ראשי">
+      <a href="#services">שירותים</a>
+      <a href="#how">איך זה עובד</a>
+      <a href="#faq">שאלות נפוצות</a>
+      <a href="#contact">צור קשר</a>
+    </nav>
+    <a class="btn btn-primary" href="tel:+972532346979"><svg><use href="#i-phone"/></svg>053-234-6979</a>
+  </div>
+</header>
+
+<main id="top">
+  <!-- Hero -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow">מספרה וסלון טיפוח · מוהליבר 1</span>
+        <h1>יוצאים מכאן <em>נקיים, רכים</em> ומאושרים</h1>
+        <p class="lead">תספורת, רחצה, סירוק וטיפוח מלא לכלבים ולחתולים — בסבלנות, בעדינות ובהרבה אהבה. קובעים תור בשיחה אחת.</p>
+        <div class="hero-ctas">
+          <a class="btn btn-primary" href="tel:+972532346979"><svg><use href="#i-phone"/></svg>התקשרו לקביעת תור</a>
+          <a class="btn btn-ghost" href="https://wa.me/972532346979?text=%D7%94%D7%99%D7%99%2C%20%D7%90%D7%A9%D7%9E%D7%97%20%D7%9C%D7%A7%D7%91%D7%95%D7%A2%20%D7%AA%D7%95%D7%A8%20%D7%9C%D7%98%D7%99%D7%A4%D7%95%D7%97" target="_blank" rel="noopener"><svg><use href="#i-wa"/></svg>שלחו וואטסאפ</a>
+        </div>
+        <div class="rating">
+          <div class="stars" aria-hidden="true">
+            <svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg>
+          </div>
+          <span><strong>4.4</strong> מתוך 33 ביקורות בגוגל</span>
+        </div>
+      </div>
+
+      <div class="hero-art" aria-hidden="true">
+        <div class="blob"></div>
+        <!-- Illustration: replace with a real photo of a freshly groomed client -->
+        <svg class="dog" viewBox="0 0 300 300">
+          <ellipse cx="150" cy="262" rx="90" ry="12" fill="#3d1f4a" opacity=".12"/>
+          <path d="M92 250c-6-40 4-86 58-86s64 46 58 86z" fill="#fff"/>
+          <circle cx="150" cy="128" r="64" fill="#fff"/>
+          <circle cx="98" cy="86" r="26" fill="#fff"/><circle cx="202" cy="86" r="26" fill="#fff"/>
+          <circle cx="112" cy="70" r="22" fill="#fff"/><circle cx="188" cy="70" r="22" fill="#fff"/>
+          <circle cx="150" cy="58" r="28" fill="#fff"/>
+          <ellipse cx="88" cy="140" rx="22" ry="38" fill="#f6ebdf" transform="rotate(14 88 140)"/>
+          <ellipse cx="212" cy="140" rx="22" ry="38" fill="#f6ebdf" transform="rotate(-14 212 140)"/>
+          <circle cx="126" cy="128" r="8" fill="#2a1d2f"/><circle cx="174" cy="128" r="8" fill="#2a1d2f"/>
+          <circle cx="129" cy="125" r="2.5" fill="#fff"/><circle cx="177" cy="125" r="2.5" fill="#fff"/>
+          <ellipse cx="150" cy="152" rx="13" ry="9" fill="#2a1d2f"/>
+          <path d="M138 166q12 12 24 0" stroke="#2a1d2f" stroke-width="4" fill="none" stroke-linecap="round"/>
+          <circle cx="112" cy="156" r="9" fill="#f27ba3" opacity=".4"/><circle cx="188" cy="156" r="9" fill="#f27ba3" opacity=".4"/>
+          <path d="M126 44q24-22 48 0q-24 10-48 0z" fill="#f27ba3"/><circle cx="150" cy="42" r="8" fill="#ec5f8e"/>
+          <path d="M112 196h76" stroke="#f27ba3" stroke-width="10" stroke-linecap="round"/>
+          <circle cx="150" cy="210" r="9" fill="#f5b301"/>
+          <circle cx="60" cy="210" r="7" fill="#fff" opacity=".9"/><circle cx="48" cy="190" r="4" fill="#fff" opacity=".9"/>
+          <circle cx="245" cy="60" r="6" fill="#fff" opacity=".9"/><circle cx="258" cy="80" r="3.5" fill="#fff" opacity=".9"/>
+        </svg>
+        <div class="bubble b1"><span>🛁</span>רחצה ופן</div>
+        <div class="bubble b2"><span>✂️</span>תספורת מותאמת לגזע</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Trust strip -->
+  <div class="strip">
+    <div class="wrap strip-grid">
+      <div><b>4.4 ★</b><small>דירוג בגוגל</small></div>
+      <div><b>33</b><small>ביקורות של לקוחות</small></div>
+      <div><b>כלבים + חתולים</b><small>טיפוח לכל הגדלים</small></div>
+      <div><b>מוהליבר 1</b><small>סלון טיפוח</small></div>
+    </div>
+  </div>
+
+  <!-- Services -->
+  <section id="services">
+    <div class="wrap center">
+      <span class="eyebrow">השירותים שלנו</span>
+      <h2>כל מה שהפרווה צריכה</h2>
+      <p class="lead">כל טיפול מותאם לגזע, לסוג הפרווה ולאופי של החבר הקטן שלכם.</p>
+    </div>
+    <div class="wrap">
+      <div class="cards">
+        <article class="card"><div class="ic">✂️</div><h3>תספורת מלאה</h3><p>תספורת לפי גזע או לפי בקשה — מקצרה לקיץ ועד עיצוב מוקפד.</p></article>
+        <article class="card"><div class="ic">🛁</div><h3>רחצה ופן</h3><p>רחצה בשמפו עדין, ייבוש ופן שמשאירים פרווה רכה, נקייה וריחנית.</p></article>
+        <article class="card"><div class="ic">🪮</div><h3>סירוק והתרת קשרים</h3><p>הסרת פרווה מתה ופתיחת קשרים בעדינות, בלי למשוך ובלי להלחיץ.</p></article>
+        <article class="card"><div class="ic">🐾</div><h3>גזירת ציפורניים</h3><p>גזירה זהירה ומדויקת שתשמור על הליכה נוחה ועל רצפה שלמה.</p></article>
+        <article class="card"><div class="ic">👂</div><h3>ניקוי אוזניים</h3><p>ניקוי עדין שעוזר לשמור על היגיינה ולמנוע אי-נוחות.</p></article>
+        <article class="card"><div class="ic">🐈</div><h3>טיפוח לחתולים</h3><p>רחצה, סירוק ותספורת לחתולים — בסבלנות ובקצב שלהם.</p></article>
+      </div>
+      <!-- Owner: add a real price list here if you want to publish one -->
+      <div class="price-note">
+        <p>המחיר תלוי בגודל, בגזע ובמצב הפרווה. שלחו תמונה בוואטסאפ ונחזור אליכם עם הצעת מחיר.</p>
+        <a class="btn btn-wa" href="https://wa.me/972532346979" target="_blank" rel="noopener"><svg><use href="#i-wa"/></svg>קבלו הצעת מחיר</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section id="how" class="steps-bg">
+    <div class="wrap center">
+      <span class="eyebrow">איך זה עובד</span>
+      <h2>ארבעה צעדים לפרווה מושלמת</h2>
+    </div>
+    <div class="wrap steps">
+      <div class="step"><h3>קובעים תור</h3><p>בטלפון או בוואטסאפ, בשעה שנוחה לכם.</p></div>
+      <div class="step"><h3>מכירים</h3><p>מספרים לנו על הגזע, האופי והתספורת שאתם אוהבים.</p></div>
+      <div class="step"><h3>מתפנקים</h3><p>רחצה, תספורת וטיפוח — בעדינות ובלי לחץ.</p></div>
+      <div class="step"><h3>אוספים</h3><p>חוזרים הביתה עם חבר נקי, רך ומאושר.</p></div>
+    </div>
+  </section>
+
+  <!-- Dogs & cats -->
+  <section>
+    <div class="wrap center">
+      <span class="eyebrow">לכלבים וגם לחתולים</span>
+      <h2>מקום אחד לכל בני הבית</h2>
+    </div>
+    <div class="wrap split">
+      <div class="pet dog-c">
+        <h3>כלבים</h3>
+        <ul><li>גזעים קטנים, בינוניים וגדולים</li><li>תספורות לפי גזע ולפי בקשה</li><li>טיפוח שגרתי או מקיף</li></ul>
+        <span class="emoji" aria-hidden="true">🐶</span>
+      </div>
+      <div class="pet cat-c">
+        <h3>חתולים</h3>
+        <ul><li>טיפול שקט וסבלני</li><li>סירוק והתרת קשרים</li><li>רחצה ותספורת לפי הצורך</li></ul>
+        <span class="emoji" aria-hidden="true">🐱</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq" class="steps-bg">
+    <div class="wrap center">
+      <span class="eyebrow">שאלות נפוצות</span>
+      <h2>יש שאלה? יש תשובה</h2>
+    </div>
+    <div class="wrap faq">
+      <details><summary>כמה זמן לוקח טיפול?</summary><p>זה תלוי בגודל, בגזע ובמצב הפרווה. כשתקבעו תור נשמח לתת הערכת זמן מדויקת.</p></details>
+      <details><summary>כל כמה זמן כדאי להגיע לטיפוח?</summary><p>לרוב הכלבים עם פרווה ארוכה או מתולתלת מומלץ טיפוח קבוע כל כמה שבועות. נשמח להמליץ לפי הגזע שלכם.</p></details>
+      <details><summary>הכלב שלי לחוץ — זה בסדר?</summary><p>בהחלט. ספרו לנו מראש ונתאים את הקצב, נעשה הפסקות ונעבוד בסבלנות.</p></details>
+      <details><summary>אתם מטפלים גם בחתולים?</summary><p>כן! אנחנו מספרה וסלון טיפוח לכלבים וגם לחתולים.</p></details>
+    </div>
+  </section>
+
+  <!-- Contact -->
+  <section id="contact">
+    <div class="wrap">
+      <div class="contact">
+        <div>
+          <h2>מוכנים לפרווה חדשה?</h2>
+          <p class="lead">התקשרו או שלחו הודעה — נמצא לכם תור ונענה על כל שאלה.</p>
+          <div class="btns">
+            <a class="btn btn-primary" href="tel:+972532346979"><svg><use href="#i-phone"/></svg>התקשרו עכשיו</a>
+            <a class="btn btn-ghost" href="https://wa.me/972532346979" target="_blank" rel="noopener"><svg><use href="#i-wa"/></svg>וואטסאפ</a>
+          </div>
+        </div>
+        <div class="info">
+          <a href="tel:+972532346979"><span class="i">📞</span><span><small>טלפון</small><b>053-234-6979</b></span></a>
+          <a href="https://waze.com/ul?q=%D7%9E%D7%95%D7%94%D7%9C%D7%99%D7%91%D7%A8%201&navigate=yes" target="_blank" rel="noopener"><span class="i">📍</span><span><small>כתובת · ניווט בוויז</small><b>מוהליבר 1</b></span></a>
+          <!-- Owner: add opening hours -->
+          <div><span class="i">🕐</span><span><small>שעות פעילות</small><b>בתיאום מראש</b></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  © מיס פונפון · מספרה וסלון טיפוח לכלבים וחתולים
+</footer>
+
+<div class="mobile-bar">
+  <a class="btn btn-primary" href="tel:+972532346979"><svg><use href="#i-phone"/></svg>התקשרו</a>
+  <a class="btn btn-wa" href="https://wa.me/972532346979" target="_blank" rel="noopener"><svg><use href="#i-wa"/></svg>וואטסאפ</a>
+</div>
+
+</body>
+</html>
