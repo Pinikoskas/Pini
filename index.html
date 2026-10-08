@@ -319,11 +319,16 @@ footer{background:var(--green-900);color:rgba(255,248,239,.75);padding:70px 0 30
 .progress{position:fixed;top:0;right:0;height:3px;background:linear-gradient(90deg,var(--yellow),var(--orange));z-index:100;width:0;transition:width .1s linear}
 
 /* image fallback */
-.img-fallback{background:linear-gradient(135deg,var(--green-700),var(--green-500))!important}
+.img-fallback{background:radial-gradient(circle at 20% 25%,rgba(255,201,60,.35) 0 18%,transparent 19%),radial-gradient(circle at 85% 80%,rgba(255,122,47,.35) 0 22%,transparent 23%),linear-gradient(135deg,var(--green-700),var(--green-500))!important}
+.img-fallback::after{content:attr(data-fb);position:absolute;inset:0;display:grid;place-items:center;font-size:clamp(56px,9vw,130px);z-index:-1;animation:float 6s ease-in-out infinite;pointer-events:none}
+.hero__card.img-fallback::after,.groom__img.img-fallback::after,.product__img.img-fallback::after,.story__photo.img-fallback::after{z-index:1}
+.product__img.img-fallback{background:linear-gradient(135deg,#fff1e6,#fbeedd)!important}
+.cat.img-fallback::after{place-items:start center;padding-top:40px;opacity:.9}
+.banner a.img-fallback::after{font-family:'Secular One';font-size:clamp(1.3rem,3.6vw,2.8rem);color:var(--cream);z-index:1;animation:none;text-align:center;padding:0 20px}
 
 /* ---------- Store banner ---------- */
 .banner{padding:70px 0 0}
-.banner a{display:block;border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);background:var(--cream-2);aspect-ratio:1960/400}
+.banner a{position:relative;display:block;border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);background:var(--cream-2);aspect-ratio:1960/400}
 .banner img{width:100%;height:100%;object-fit:cover;transition:transform 1.2s var(--ease)}
 .banner a:hover img{transform:scale(1.03)}
 
@@ -338,7 +343,7 @@ footer{background:var(--green-900);color:rgba(255,248,239,.75);padding:70px 0 30
 .brand:hover img{filter:none;opacity:1;transform:scale(1.06)}
 
 /* story photo */
-.story__photo{grid-column:1/-1;border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm);aspect-ratio:2500/1330;background:var(--cream-2)}
+.story__photo{position:relative;grid-column:1/-1;border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm);aspect-ratio:2500/1330;background:var(--cream-2)}
 .story__photo img{width:100%;height:100%;object-fit:cover}
 
 /* ---------- Responsive ---------- */
@@ -462,9 +467,9 @@ footer{background:var(--green-900);color:rgba(255,248,239,.75);padding:70px 0 30
     </div>
 
     <div class="hero__visual" aria-hidden="true">
-      <div class="hero__card hero__card--1"><img src="https://static.wixstatic.com/media/495876_a510fb952da2444badf662379c63a03f~mv2.jpg/v1/fill/w_700,h_640,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/495876_a510fb952da2444badf662379c63a03f~mv2.jpg" alt="" fetchpriority="high"></div>
-      <div class="hero__card hero__card--2"><img src="https://static.wixstatic.com/media/495876_500f15483e664fbea57101831ef523bf~mv2.jpg/v1/fill/w_420,h_420,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/495876_500f15483e664fbea57101831ef523bf~mv2.jpg" alt=""></div>
-      <div class="hero__card hero__card--3"><img src="https://static.wixstatic.com/media/495876_e10332353df748f8b2a722b8d81ab080~mv2.jpg/v1/fill/w_360,h_360,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/495876_e10332353df748f8b2a722b8d81ab080~mv2.jpg" alt=""></div>
+      <div class="hero__card hero__card--1" data-fb="🐶"><img src="https://static.wixstatic.com/media/495876_a510fb952da2444badf662379c63a03f~mv2.jpg/v1/fill/w_700,h_640,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/495876_a510fb952da2444badf662379c63a03f~mv2.jpg" alt="" fetchpriority="high"></div>
+      <div class="hero__card hero__card--2" data-fb="🐱"><img src="https://static.wixstatic.com/media/495876_500f15483e664fbea57101831ef523bf~mv2.jpg/v1/fill/w_420,h_420,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/495876_500f15483e664fbea57101831ef523bf~mv2.jpg" alt=""></div>
+      <div class="hero__card hero__card--3" data-fb="🦜"><img src="https://static.wixstatic.com/media/495876_e10332353df748f8b2a722b8d81ab080~mv2.jpg/v1/fill/w_360,h_360,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/495876_e10332353df748f8b2a722b8d81ab080~mv2.jpg" alt=""></div>
       <div class="badge-float badge-float--a"><span class="ico">🚚</span><span>משלוח חינם<small>בכל ירושלים מעל ₪200</small></span></div>
       <div class="badge-float badge-float--b"><span class="ico">💚</span><span>ייעוץ אישי<small>מצוות מקצועי ואוהב</small></span></div>
     </div>
@@ -486,7 +491,7 @@ footer{background:var(--green-900);color:rgba(255,248,239,.75);padding:70px 0 30
 <!-- Store banner -->
 <section class="banner">
   <div class="container">
-    <a class="reveal-scale" href="https://wa.me/972586423390" target="_blank" rel="noopener" aria-label="עוז עמק החיות הקסום, הזמינו בווצאפ">
+    <a class="reveal-scale" data-fb="🐾 עוז עמק החיות הקסום · מאז 1981 🐾" href="https://wa.me/972586423390" target="_blank" rel="noopener" aria-label="עוז עמק החיות הקסום, הזמינו בווצאפ">
       <img src="https://static.wixstatic.com/media/495876_f7f9898d17534cfa8fae3d5057d85ac7~mv2.png/v1/fill/w_1960,h_400,al_c,q_95,enc_avif,quality_auto/Web%20Site%20Banner%20-%20Top%202.png" alt="עוז עמק החיות הקסום, חנות החיות המובילה בירושלים" loading="lazy">
     </a>
   </div>
@@ -501,42 +506,42 @@ footer{background:var(--green-900);color:rgba(255,248,239,.75);padding:70px 0 30
       <p class="reveal">מגוון ענק של מזון, ציוד וצעצועים ממיטב המותגים, לכל סוג של חיה ולכל תקציב.</p>
     </div>
     <div class="cats">
-      <a class="cat cat--big reveal-scale tilt" href="https://www.oz-animals.com/כלבים">
+      <a class="cat cat--big reveal-scale tilt" data-fb="🐕" href="https://www.oz-animals.com/כלבים">
         <img src="https://static.wixstatic.com/media/495876_a510fb952da2444badf662379c63a03f~mv2.jpg/v1/fill/w_900,h_900,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/495876_a510fb952da2444badf662379c63a03f~mv2.jpg" alt="כלב" loading="lazy">
         <span class="cat__emoji">🐶</span>
         <h3>כלבים</h3>
         <p>כל מה שאפשר לדמיין עבור החבר המכשכש בזנב: מזון, חטיפים, רתמות, מיטות ומוצרי אילוף.</p>
         <span class="cat__go">למוצרים לכלבים <i>←</i></span>
       </a>
-      <a class="cat cat--wide reveal-scale tilt" href="https://www.oz-animals.com/חתולים">
+      <a class="cat cat--wide reveal-scale tilt" data-fb="🐈" href="https://www.oz-animals.com/חתולים">
         <img src="https://static.wixstatic.com/media/495876_500f15483e664fbea57101831ef523bf~mv2.jpg/v1/fill/w_800,h_420,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/495876_500f15483e664fbea57101831ef523bf~mv2.jpg" alt="חתול" loading="lazy">
         <span class="cat__emoji">🐱</span>
         <h3>חתולים</h3>
         <p>כל המוצרים שיביאו לגרגורים של שמחה.</p>
         <span class="cat__go">למוצרים לחתולים <i>←</i></span>
       </a>
-      <a class="cat reveal-scale tilt" href="https://www.oz-animals.com/ציפורים">
+      <a class="cat reveal-scale tilt" data-fb="🦜" href="https://www.oz-animals.com/ציפורים">
         <img src="https://static.wixstatic.com/media/495876_e10332353df748f8b2a722b8d81ab080~mv2.jpg/v1/fill/w_500,h_420,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/495876_e10332353df748f8b2a722b8d81ab080~mv2.jpg" alt="ציפור" loading="lazy">
         <span class="cat__emoji">🦜</span>
         <h3>ציפורים</h3>
         <p>לבעלי הכנף, הנוצה והמקור.</p>
         <span class="cat__go">לחנות <i>←</i></span>
       </a>
-      <a class="cat reveal-scale tilt" href="https://www.oz-animals.com/דגים">
+      <a class="cat reveal-scale tilt" data-fb="🐠" href="https://www.oz-animals.com/דגים">
         <img src="https://static.wixstatic.com/media/nsplsh_706f6c795f686d68774a73~mv2_d_4778_3185_s_4_2.jpg/v1/fill/w_500,h_420,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/nsplsh_706f6c795f686d68774a73~mv2_d_4778_3185_s_4_2.jpg" alt="דגים" loading="lazy">
         <span class="cat__emoji">🐠</span>
         <h3>דגים</h3>
         <p>חיים מתחת למים לא צריכים להיות משעממים.</p>
         <span class="cat__go">לחנות <i>←</i></span>
       </a>
-      <a class="cat cat--wide reveal-scale tilt" href="https://www.oz-animals.com/חיות-קטנות">
+      <a class="cat cat--wide reveal-scale tilt" data-fb="🐇" href="https://www.oz-animals.com/חיות-קטנות">
         <img src="https://static.wixstatic.com/media/bbc3c70d402c478bb7a6633d9a0cde0f.png/v1/fill/w_800,h_420,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/bbc3c70d402c478bb7a6633d9a0cde0f.png" alt="שרקן" loading="lazy">
         <span class="cat__emoji">🐹</span>
         <h3>מכרסמים וחיות קטנות</h3>
         <p>כל מה שאפשר לדמיין עבור מכרסמים, ארנבים וחבריהם.</p>
         <span class="cat__go">לחנות <i>←</i></span>
       </a>
-      <a class="cat cat--wide reveal-scale tilt" href="https://www.oz-animals.com">
+      <a class="cat cat--wide reveal-scale tilt" data-fb="🦎" href="https://www.oz-animals.com">
         <img src="https://static.wixstatic.com/media/82fcd3_b0859172cf504ad3b7dfcdad97f6e9a3~mv2_d_4256_2832_s_4_2.jpg/v1/fill/w_800,h_420,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/82fcd3_b0859172cf504ad3b7dfcdad97f6e9a3~mv2_d_4256_2832_s_4_2.jpg" alt="זוחל" loading="lazy">
         <span class="cat__emoji">🦎</span>
         <h3>זוחלים</h3>
@@ -562,7 +567,7 @@ footer{background:var(--green-900);color:rgba(255,248,239,.75);padding:70px 0 30
       </ul>
       <a class="btn btn--primary reveal" href="https://wa.me/972586423390?text=%D7%94%D7%99%D7%99%2C%20%D7%90%D7%A9%D7%9E%D7%97%20%D7%9C%D7%A7%D7%91%D7%95%D7%A2%20%D7%AA%D7%95%D7%A8%20%D7%9C%D7%9E%D7%A1%D7%A4%D7%A8%D7%AA%20%D7%94%D7%9B%D7%9C%D7%91%D7%99%D7%9D" target="_blank" rel="noopener">✂️ קבעו תור למספרה</a>
     </div>
-    <div class="groom__img reveal-scale">
+    <div class="groom__img reveal-scale" data-fb="🛁🐩">
       <img src="https://static.wixstatic.com/media/11062b_be23a02c95344c1a8d96ab2608620c09~mv2.jpg/v1/fill/w_900,h_720,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/11062b_be23a02c95344c1a8d96ab2608620c09~mv2.jpg" alt="כלב במספרה" loading="lazy">
     </div>
   </div>
@@ -588,7 +593,7 @@ footer{background:var(--green-900);color:rgba(255,248,239,.75);padding:70px 0 30
       </div>
 
       <article class="product reveal" data-product="אקנה לחתול באונטיפול קאטץ' (סלמון והרינג מופחת דגנים) 4.5 ק&quot;ג">
-        <div class="product__img">
+        <div class="product__img" data-fb="🐈">
           <span class="save">חיסכון ₪30</span>
           <img src="https://static.wixstatic.com/media/495876_91985efd611a4eccaac5f6f2cffed81c~mv2.jpg/v1/fill/w_500,h_500,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/495876_91985efd611a4eccaac5f6f2cffed81c~mv2.jpg" alt="אקנה לחתול באונטיפול קאטץ' 4.5 ק&quot;ג" loading="lazy">
           <img src="https://static.wixstatic.com/media/495876_7911a29d61474822bc0be834841f3c2e~mv2.png/v1/fill/w_500,h_500,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/495876_7911a29d61474822bc0be834841f3c2e~mv2.png" alt="" loading="lazy">
@@ -600,7 +605,7 @@ footer{background:var(--green-900);color:rgba(255,248,239,.75);padding:70px 0 30
       </article>
 
       <article class="product reveal" data-product="אקנה לחתול באונטיפול קאטץ' (סלמון והרינג מופחת דגנים) 1.8 ק&quot;ג">
-        <div class="product__img">
+        <div class="product__img" data-fb="🐈">
           <span class="save">חיסכון ₪30</span>
           <img src="https://static.wixstatic.com/media/495876_85453de371234dd0a84ca13eb18e6a7d~mv2.jpg/v1/fill/w_500,h_500,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/495876_85453de371234dd0a84ca13eb18e6a7d~mv2.jpg" alt="אקנה לחתול באונטיפול קאטץ' 1.8 ק&quot;ג" loading="lazy">
         </div>
@@ -632,7 +637,7 @@ footer{background:var(--green-900);color:rgba(255,248,239,.75);padding:70px 0 30
       <a class="btn btn--ghost reveal" href="#visit" style="margin-top:12px">בואו לבקר אותנו ←</a>
     </div>
     <div class="numbers">
-      <div class="story__photo reveal-scale"><img src="https://static.wixstatic.com/media/495876_90725d60595e49edabe9a88283c750ed~mv2.png/v1/fit/w_1200,h_640,al_c,q_90,enc_avif,quality_auto/495876_90725d60595e49edabe9a88283c750ed~mv2.png" alt="עוז עמק החיות הקסום" loading="lazy"></div>
+      <div class="story__photo reveal-scale" data-fb="🐾🏪🐾"><img src="https://static.wixstatic.com/media/495876_90725d60595e49edabe9a88283c750ed~mv2.png/v1/fit/w_1200,h_640,al_c,q_90,enc_avif,quality_auto/495876_90725d60595e49edabe9a88283c750ed~mv2.png" alt="עוז עמק החיות הקסום" loading="lazy"></div>
       <div class="num reveal"><b><span data-count="45" id="years">45</span>+</b><span>שנות ניסיון</span><small>שירות ללא תחרות</small></div>
       <div class="num reveal"><b data-count="7">7</b><span>עולמות חיות</span><small>כלבים, חתולים, ציפורים ועוד</small></div>
       <div class="num reveal"><b data-count="6">6</b><span>ימים בשבוע</span><small>פתוחים בשבילכם</small></div>
@@ -885,9 +890,17 @@ footer{background:var(--green-900);color:rgba(255,248,239,.75);padding:70px 0 30
   setTimeout(() => { fab.classList.add('tip'); setTimeout(() => fab.classList.remove('tip'), 4500); }, 6000);
 
   // Graceful image fallback
-  document.querySelectorAll('img').forEach(img => img.addEventListener('error', () => {
-    img.style.visibility = 'hidden'; img.parentElement.classList.add('img-fallback');
-  }, { once: true }));
+  const fail = img => {
+    img.style.visibility = 'hidden';
+    if (img.closest('.brand')) { document.querySelector('.brands').style.display = 'none'; return; }
+    if (img.closest('.promo')) return;
+    const box = img.closest('[data-fb]') || img.parentElement;
+    box.classList.add('img-fallback');
+  };
+  document.querySelectorAll('img').forEach(img => {
+    if (img.complete && img.naturalWidth === 0 && img.getAttribute('src')) fail(img);
+    else img.addEventListener('error', () => fail(img), { once: true });
+  });
 })();
 </script>
 </body>
