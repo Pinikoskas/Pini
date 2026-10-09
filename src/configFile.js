@@ -12,7 +12,6 @@ const EDITABLE = {
   run_every_minutes: (v) => nonNegativeNumber(v, 'דקות בין סבבים'),
   feed_scrolls: (v) => nonNegativeNumber(v, 'גלילות בפיד'),
   max_scrolls_per_group: (v) => positiveNumber(v, 'גלילות בקבוצה'),
-  mark_interested: (v) => v === true || v === 'true',
 };
 
 function nonNegativeNumber(v, label) {
@@ -45,7 +44,6 @@ function editableValues(cfg) {
     run_every_minutes: cfg.run_every_minutes ?? 60,
     feed_scrolls: cfg.feed_scrolls ?? 40,
     max_scrolls_per_group: cfg.max_scrolls_per_group ?? 100,
-    mark_interested: cfg.mark_interested ?? true,
   };
 }
 

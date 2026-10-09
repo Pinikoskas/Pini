@@ -216,10 +216,8 @@ test('config: panel edits single values and keeps comments; bad values rejected'
   assert.match(text, /# הסבר\nmax_post_age_days: 2\n/);
   assert.match(text, /# ווצאפ\nwhatsapp:\n  phone: "050-1234567"\n/);
   assert.deepEqual(editableValues(loadConfig(file)), {
-    phone: '050-1234567', max_post_age_days: 2, run_every_minutes: 30, feed_scrolls: 10, max_scrolls_per_group: 100, mark_interested: true,
+    phone: '050-1234567', max_post_age_days: 2, run_every_minutes: 30, feed_scrolls: 10, max_scrolls_per_group: 100,
   });
-  updateConfigValues(file, { mark_interested: false }); // the panel's checkbox
-  assert.equal(loadConfig(file).mark_interested, false);
   assert.throws(() => updateConfigValues(file, { max_post_age_days: 0 }));
   assert.throws(() => updateConfigValues(file, { run_every_minutes: 'abc' }));
   assert.throws(() => updateConfigValues(file, { something_else: 1 }));

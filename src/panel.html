@@ -125,8 +125,7 @@
     <li><b>פעם אחת בלבד:</b> פוסט שכבר נשלח אליך לא יישלח שוב.</li>
     <li><b>סריקה חכמה בקבוצות:</b> הקבוצות נסרקות מהחדש לישן. הבוט זוכר את הפוסט האחרון שבדק בכל קבוצה, ובסבב הבא בודק רק מה שנוסף מאז.</li>
     <li><b>רץ לבד:</b> סורק מחדש כל כמה דקות (לפי ההגדרות), כל עוד התוכנה פתוחה.</li>
-    <li><b>מלמד את הפיד:</b> מסמן "מעניין אותי" על כל פוסט שנשלח אליך, כדי שפייסבוק יציג לך עוד פוסטים כאלה (אפשר לכבות בהגדרות).</li>
-    <li><b>בטוח לחשבון:</b> בפייסבוק הבוט לא מגיב, לא שולח הודעות ולא מפרסם כלום.</li>
+    <li><b>בטוח לחשבון:</b> בפייסבוק הבוט רק קורא. הוא לא מגיב, לא שולח הודעות ולא מפרסם כלום.</li>
     <li><b>מצב בדיקה:</b> סורק ומציג בטרמינל מה היה נשלח, בלי לשלוח לווצאפ.</li>
   </ul>
   <div class="close"><button class="primary" id="aboutClose">סגור</button></div>
@@ -143,7 +142,6 @@
         <label class="field"><span>כל כמה דקות לסרוק מחדש (0 = סבב אחד)</span><input type="number" name="run_every_minutes" min="0" step="1"></label>
         <label class="field"><span>כמה גלילות בפיד הראשי (0 = לא לסרוק את הפיד)</span><input type="number" name="feed_scrolls" min="0" step="1"></label>
         <label class="field"><span>מקסימום גלילות בכל קבוצה</span><input type="number" name="max_scrolls_per_group" min="1" step="1"></label>
-        <label class="check" style="margin:4px 0 12px"><input type="checkbox" name="mark_interested"> לסמן "מעניין אותי" בפייסבוק על כל פוסט שנשלח (כדי שהפיד יציג עוד כאלה)</label>
         <div class="row"><button type="submit" class="primary" id="saveSettings" disabled>שמור הגדרות</button><span id="settingsMsg" class="msg"></span></div>
       </form>
     </section>
@@ -239,11 +237,7 @@ $('stop').onclick = () => api('/api/stop', {}).catch((e) => alert(e.message));
 
 // ---------- settings ----------
 function fillSettings(s) {
-  for (const [k, v] of Object.entries(s)) {
-    const input = $('settings').elements[k];
-    if (input && input.type === 'checkbox') input.checked = !!v;
-    else if (input) input.value = v;
-  }
+  for (const [k, v] of Object.entries(s)) if ($('settings').elements[k]) $('settings').elements[k].value = v;
   $('saveSettings').disabled = false; // only once the real values are in the form
 }
 let msgTimers = {};
@@ -257,7 +251,6 @@ function flash(id, text, ok) {
 $('settings').onsubmit = async (ev) => {
   ev.preventDefault();
   const values = Object.fromEntries(new FormData($('settings')));
-  values.mark_interested = $('settings').elements.mark_interested.checked;
   try {
     const { settings } = await api('/api/settings', values);
     fillSettings(settings);

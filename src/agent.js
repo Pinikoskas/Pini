@@ -20,10 +20,6 @@ const { loadConfig } = require('./configFile');
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
 const OLD_POSTS_TO_STOP = 3;
-// "Interested" marks per round, so the account doesn't act faster than a person would.
-const MAX_INTERESTED_PER_ROUND = 15;
-const POST_MENU_BUTTON = /Actions for this post|פעולות עבור פוסט|פעולות לפוסט/i;
-const INTERESTED_ITEM = /^\s*(Interested|Show more|מעניין אותי|מעוניין|מעוניינת|הצג יותר|להציג יותר|יותר כאלה)/i;
 
 // ---------- browser-side helpers (run inside the Facebook page) ----------
 
@@ -181,7 +177,6 @@ class DJAgent {
     this.notificationsSent = 0;
     this.sendFailures = 0;
     this.seenThisRun = new Set();
-    this.interestedThisRound = 0;
     this.stopRequested = false;
     this.wakeUp = null;
     this.status = { state: 'stopped', detail: '', nextRoundAt: null, sent: 0, dryRun };
@@ -192,7 +187,6 @@ class DJAgent {
     this.matcher = new PostMatcher(cfg.include_patterns, cfg.exclude_patterns);
     this.maxAgeMs = Number(cfg.max_post_age_days ?? 3) * DAY;
     this.whatsapp = cfg.whatsapp || {};
-    this.markInterestedOn = cfg.mark_interested ?? true;
   }
 
   reloadConfig() {
@@ -289,7 +283,6 @@ class DJAgent {
         this.reloadConfig();
         this.storage.reload(); // history / bookmarks may have been cleared from the panel
         this.lastSeen.reload();
-        this.interestedThisRound = 0;
         if (this.wa && this.whatsapp.phone !== phoneBefore) {
           log(`מספר הטלפון השתנה – מתחבר לצ'אט החדש בווצאפ`);
           await this.wa.setPhone(this.whatsapp.phone);
@@ -531,38 +524,7 @@ class DJAgent {
       log(`   ✘ שליחה לווצאפ נכשלה: ${e.message.split('\n')[0]}`);
     }
     await page.bringToFront();
-    if (this.markInterestedOn) await this.markInterested(page, el);
     return { age, key: post.key };
-  }
-
-  /**
-   * Tells Facebook "show me more like this": the post's ⋯ menu → "Interested". A private
-   * feed preference (nothing is posted). Not every post has it (mostly posts in the main feed).
-   */
-  async markInterested(page, el) {
-    if (this.interestedThisRound >= MAX_INTERESTED_PER_ROUND) return;
-    try {
-      const button = el.getByRole('button', { name: POST_MENU_BUTTON }).first();
-      if ((await button.count()) === 0) return log('   ℹ לא מצאתי את תפריט ⋯ של הפוסט – לא סומן "מעניין אותי"');
-      await sleep(800 + Math.random() * 1200);
-      await button.click({ timeout: 5000 });
-      const menu = page.locator('[role="menu"]').last();
-      await menu.waitFor({ state: 'visible', timeout: 5000 });
-      await sleep(500 + Math.random() * 800);
-      const item = menu.getByRole('menuitem', { name: INTERESTED_ITEM }).first();
-      if ((await item.count()) === 0) {
-        const options = (await menu.getByRole('menuitem').allInnerTexts()).map((t) => t.split('\n')[0].trim()).filter(Boolean);
-        await page.keyboard.press('Escape');
-        return log(`   ℹ אין בפוסט הזה "מעניין אותי" (בתפריט: ${options.slice(0, 8).join(' | ') || 'ריק'})`);
-      }
-      await item.click({ timeout: 5000 });
-      this.interestedThisRound++;
-      log('   👍 סומן "מעניין אותי" – פייסבוק יציג עוד פוסטים כאלה');
-      await sleep(1000 + Math.random() * 1500);
-    } catch (e) {
-      await page.keyboard.press('Escape').catch(() => {});
-      log(`   ℹ לא הצלחתי לסמן "מעניין אותי": ${e.message.split('\n')[0]}`);
-    }
   }
 
   printPost(post, matched, ageDesc) {
