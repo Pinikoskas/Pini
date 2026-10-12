@@ -381,3 +381,7 @@ test('group names without Facebook notification text', () => {
   assert.equal(cleanGroupName('לא נקראו‏‏מאורסים 25/26‏‏: "‏אלכוהול למכירה‏"‏1 שעות'), 'מאורסים 25/26');
   assert.equal(cleanGroupName('♣ ירושלמים וירושלמיות'), '♣ ירושלמים וירושלמיות');
 });
+
+test('matcher: "נעים מאוד" alone does not filter a real request', () => {
+  assert.ok(new PostMatcher().match("נעים מאוד, מחפש דיג'יי לחתונה באוגוסט"));
+});
