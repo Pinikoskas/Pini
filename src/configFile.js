@@ -8,6 +8,7 @@ const yaml = require('js-yaml');
 /** Settings the panel may change: name -> how to validate the value. */
 const EDITABLE = {
   phone: (v) => String(v || '').trim(),
+  group_name: (v) => String(v || '').trim(),
   group_link: (v) => {
     const link = String(v || '').trim();
     if (link && !/chat\.whatsapp\.com\/(?:invite\/)?[A-Za-z0-9]{10,}/.test(link)) {
@@ -47,6 +48,7 @@ function loadConfig(file) {
 function editableValues(cfg) {
   return {
     phone: (cfg.whatsapp && cfg.whatsapp.phone) || '',
+    group_name: (cfg.whatsapp && cfg.whatsapp.group_name) || '',
     group_link: (cfg.whatsapp && cfg.whatsapp.group_link) || '',
     max_post_age_days: cfg.max_post_age_days ?? 3,
     run_every_minutes: cfg.run_every_minutes ?? 60,
@@ -67,7 +69,7 @@ function updateConfigValues(file, values) {
     clean[key] = EDITABLE[key](value);
   }
   for (const [key, value] of Object.entries(clean)) {
-    const nested = key === 'phone' || key === 'group_link'; // under "whatsapp:"
+    const nested = key === 'phone' || key === 'group_name' || key === 'group_link'; // under "whatsapp:"
     const yamlValue = nested ? JSON.stringify(value) : String(value);
     if (nested) {
       const line = new RegExp(`^(\\s+${key}:).*$`, 'm');

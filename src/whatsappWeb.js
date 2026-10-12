@@ -5,6 +5,10 @@
 
 const COMPOSE_BOX = 'footer div[contenteditable="true"], div[contenteditable="true"][data-tab="10"]';
 const QR_CODE = 'canvas[aria-label*="QR" i], canvas[aria-label*="scan" i], div[data-ref] canvas';
+const CHAT_LIST = '#pane-side, #side';
+const CHAT_HEADER = '#main header';
+const SEARCH_BOX = '#side div[contenteditable="true"], #side input[type="text"], [aria-label*="Search" i][contenteditable="true"], [aria-label*="חיפוש"][contenteditable="true"]';
+const sameText = (t) => String(t || '').replace(/\s+/g, ' ').trim().toLowerCase();
 const INVALID_NUMBER = /invalid|אינו תקין|לא תקין/i;
 const BAD_INVITE = /invalid|expired|reset|revoked|לא תקין|פג תוקף|אופס|אינו פעיל|בוטל/i;
 const JOIN_OR_OPEN = /join|הצטרפ|open chat|open group|view group|פתיחת הצ'אט|פתיחת צ'אט|פתח צ'אט|פתיחת הקבוצה|הצגת הקבוצה|צפייה בקבוצה/i;
@@ -26,7 +30,10 @@ function groupInviteCode(link) {
 }
 
 class WhatsAppWeb {
-  /** target: { phone } for your own chat, or { group_link } for a group (the group wins). */
+  /**
+   * target: { phone } for your own chat, or { group_name, group_link } for a group (the group
+   * wins). The group is opened by its name; the invite link is only used to join it.
+   */
   constructor(context, target, { baseUrl = 'https://web.whatsapp.com', log = console.log } = {}) {
     this.context = context;
     this.baseUrl = baseUrl;
@@ -37,11 +44,13 @@ class WhatsAppWeb {
 
   setTargetOnly(target = {}) {
     this.phone = normalizePhone(target.phone);
-    this.groupCode = groupInviteCode(target.group_link);
+    this.groupName = String(target.group_name || '').trim();
+    this.groupCode = this.groupName ? groupInviteCode(target.group_link) : null;
   }
 
   chatUrl() {
-    return this.groupCode ? `${this.baseUrl}/accept?code=${this.groupCode}` : `${this.baseUrl}/send?phone=${this.phone}`;
+    if (this.groupName) return this.groupCode ? `${this.baseUrl}/accept?code=${this.groupCode}` : `${this.baseUrl}/`;
+    return `${this.baseUrl}/send?phone=${this.phone}`;
   }
 
   /** Opens WhatsApp Web on the chat (or group); waits (up to 10 min) for a QR scan if needed. */
@@ -51,23 +60,30 @@ class WhatsAppWeb {
     let askedForQr = false;
     const deadline = Date.now() + 10 * 60 * 1000;
     while (Date.now() < deadline) {
-      if (await this.page.locator(COMPOSE_BOX).first().isVisible().catch(() => false)) return;
       const dialog = this.page.locator('[role="dialog"]').first();
       const bodyText = await dialog.innerText({ timeout: 500 }).catch(() => '');
-      if (this.groupCode) {
-        // The invite link opens a "join group" window (or the chat, if you're already in it).
+      if (this.groupName) {
+        // The invite link opens a "join group" window when you're not in the group yet.
         const button = dialog.getByRole('button', { name: JOIN_OR_OPEN }).first();
-        if (await button.isVisible().catch(() => false)) {
-          this.log('מצטרף לקבוצת הווצאפ / פותח אותה...');
+        if (this.groupCode && (await button.isVisible().catch(() => false))) {
+          this.log('מצטרף לקבוצת הווצאפ...');
           await button.click().catch(() => {});
           await sleep(3000);
           continue;
         }
-        if (bodyText && BAD_INVITE.test(bodyText)) {
+        if (this.groupCode && bodyText && BAD_INVITE.test(bodyText)) {
           throw new Error('ווצאפ: קישור הקבוצה לא תקין או פג תוקף. העתק קישור הזמנה חדש מהקבוצה (פרטי הקבוצה ← הזמנה באמצעות קישור)');
         }
-      } else if (INVALID_NUMBER.test(bodyText)) {
-        throw new Error(`ווצאפ: המספר ${this.phone} לא תקין. בדוק את מספר הטלפון בהגדרות`);
+        if (await this.page.locator(CHAT_LIST).first().isVisible().catch(() => false)) {
+          await sleep(1500); // let a "join" window show up, if there is one
+          if (this.groupCode && (await button.isVisible().catch(() => false))) continue;
+          return this.openGroup();
+        }
+      } else {
+        if (await this.page.locator(COMPOSE_BOX).first().isVisible().catch(() => false)) return;
+        if (INVALID_NUMBER.test(bodyText)) {
+          throw new Error(`ווצאפ: המספר ${this.phone} לא תקין. בדוק את מספר הטלפון בהגדרות`);
+        }
       }
       if (!askedForQr && (await this.page.locator(QR_CODE).first().isVisible().catch(() => false))) {
         this.log('סרוק את קוד ה-QR בלשונית של ווצאפ: בטלפון → ווצאפ → מכשירים מקושרים → קישור מכשיר');
@@ -78,6 +94,35 @@ class WhatsAppWeb {
     throw new Error('ווצאפ ווב לא נטען תוך 10 דקות (לא נסרק QR?)');
   }
 
+  /** True when the open chat is the group (its name is in the chat's header). */
+  async inGroupChat() {
+    if (!this.page || this.page.isClosed()) return false;
+    const header = await this.page.locator(CHAT_HEADER).first().innerText({ timeout: 1000 }).catch(() => '');
+    return sameText(header).includes(sameText(this.groupName));
+  }
+
+  /** Opens the group by its name: from the chat list, or through the search box. */
+  async openGroup() {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (await this.inGroupChat()) return;
+      await this.page.keyboard.press('Escape').catch(() => {});
+      let item = this.page.locator(CHAT_LIST).getByTitle(this.groupName, { exact: true }).first();
+      if (!(await item.isVisible().catch(() => false))) {
+        const search = this.page.locator(SEARCH_BOX).first();
+        await search.click({ timeout: 5000 }).catch(() => {});
+        await this.page.keyboard.press('Control+A').catch(() => {});
+        await this.page.keyboard.press('Backspace').catch(() => {});
+        await this.page.keyboard.insertText(this.groupName);
+        await sleep(2500);
+        item = this.page.locator(CHAT_LIST).getByTitle(this.groupName, { exact: true }).first();
+      }
+      await item.click({ timeout: 5000 }).catch(() => {});
+      await sleep(2000);
+    }
+    if (await this.inGroupChat()) return;
+    throw new Error(`ווצאפ: לא מצאתי קבוצה בשם "${this.groupName}". בדוק שהשם בהגדרות זהה בדיוק לשם הקבוצה בווצאפ`);
+  }
+
   /** Switches to another chat or group (changed in the settings). */
   async setTarget(target) {
     this.setTargetOnly(target);
@@ -86,10 +131,12 @@ class WhatsAppWeb {
 
   async send(text) {
     let box = this.page && !this.page.isClosed() ? this.page.locator(COMPOSE_BOX).first() : null;
-    if (!box || !(await box.isVisible().catch(() => false))) {
+    if (!box || !(await box.isVisible().catch(() => false)) || (this.groupName && !(await this.inGroupChat()))) {
       await this.ensureReady();
       box = this.page.locator(COMPOSE_BOX).first();
     }
+    // Never send to the wrong chat: in group mode, the group must be the open chat.
+    if (this.groupName && !(await this.inGroupChat())) throw new Error(`הקבוצה "${this.groupName}" לא פתוחה בווצאפ – ההודעה לא נשלחה`);
     await this.page.bringToFront();
     await box.click();
     const lines = text.trim().split('\n');

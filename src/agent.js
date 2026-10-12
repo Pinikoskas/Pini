@@ -106,7 +106,7 @@ function jsPostInfo(el) {
 // ---------- pure helpers ----------
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const waTarget = (w) => (w.group_link ? `group:${w.group_link}` : `phone:${w.phone || ''}`);
+const waTarget = (w) => (w.group_name ? `group:${w.group_name}|${w.group_link || ''}` : `phone:${w.phone || ''}`);
 
 /**
  * The browser the agent drives: the Chromium that `npm install` downloads, or, when that
@@ -306,7 +306,7 @@ class DJAgent {
         this.storage.reload(); // history / bookmarks may have been cleared from the panel
         this.lastSeen.reload();
         if (this.wa && waTarget(this.whatsapp) !== targetBefore) {
-          log(`יעד הווצאפ השתנה – מתחבר ל${this.whatsapp.group_link ? 'קבוצה' : "צ'אט"} החדש`);
+          log(`יעד הווצאפ השתנה – מתחבר ל${this.whatsapp.group_name ? 'קבוצה' : "צ'אט"} החדש`);
           await this.wa.setTarget(this.whatsapp);
         }
         const sources = buildSources(this.cfg);
@@ -322,6 +322,7 @@ class DJAgent {
             log(`   ✘ שגיאה בסריקת ${source.label}, ממשיך לעמוד הבא: ${e.message.split('\n')[0]}`);
           }
         }
+        if (!this.stopRequested) await this.reportRoundDone(page);
         const everyMinutes = Number(this.cfg.run_every_minutes || 0);
         if (this.stopRequested || !everyMinutes) break;
         const nextRoundAt = Date.now() + everyMinutes * 60 * 1000;
@@ -339,6 +340,17 @@ class DJAgent {
       this.stopRequested = false;
       this.setStatus('stopped');
     }
+  }
+
+  /** "סיימתי את הסבב בשעה 14:05" to WhatsApp after every full round. */
+  async reportRoundDone(page) {
+    if (this.dryRun || !this.notify) return;
+    try {
+      await this.notify(`סיימתי את הסבב בשעה ${new Date().toTimeString().slice(0, 5)}`);
+    } catch (e) {
+      log(`   ✘ הודעת סיום הסבב לא נשלחה: ${e.message.split('\n')[0]}`);
+    }
+    await page.bringToFront().catch(() => {});
   }
 
   async isLoginPage(page) {

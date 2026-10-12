@@ -18,7 +18,8 @@ function formatPostMessage(post, ageDesc) {
 }
 
 function checkWhatsAppSettings(settings) {
-  if (!settings || (!settings.phone && !settings.group_link)) return 'חסר מספר טלפון או קישור לקבוצת ווצאפ בהגדרות.';
+  if (!settings || (!settings.phone && !settings.group_name)) return 'חסר מספר טלפון או שם של קבוצת ווצאפ בהגדרות.';
+  if (settings.group_link && !settings.group_name) return 'מלא גם את שם קבוצת הווצאפ (בדיוק כמו שהוא מופיע בווצאפ).';
   return null;
 }
 

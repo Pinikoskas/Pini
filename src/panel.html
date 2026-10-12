@@ -122,6 +122,7 @@
     <li><b>מזהה מי מחפש דיג'יי:</b> "מחפש דיג'יי", "צריכים DJ לחתונה", "ממליצים על תקליטן" וכו'. מדלג על דיג'יים שמפרסמים את עצמם, על מי שמחפש קורס DJ ועל קנייה ומכירה של ציוד.</li>
     <li><b>רק פוסטים חדשים:</b> שולח רק פוסטים מהימים האחרונים (לפי "כמה ימים אחורה" בהגדרות).</li>
     <li><b>שולח לך לווצאפ:</b> כל פוסט מתאים מגיע אליך לצ'אט "אני" (או לקבוצת הווצאפ שבחרת), עם השם, הקבוצה, מתי עלה, הטקסט וקישור. אתה פונה לאנשים בעצמך.</li>
+    <li><b>מעדכן בסוף כל סבב:</b> שולח לווצאפ "סיימתי את הסבב בשעה ..." כשהסבב נגמר.</li>
     <li><b>פעם אחת בלבד:</b> פוסט שכבר נשלח אליך לא יישלח שוב.</li>
     <li><b>סריקה חכמה בקבוצות:</b> הקבוצות נסרקות מהחדש לישן. הבוט זוכר את הפוסט האחרון שבדק בכל קבוצה, ובסבב הבא בודק רק מה שנוסף מאז.</li>
     <li><b>רץ לבד:</b> סורק מחדש כל כמה דקות (לפי ההגדרות), כל עוד התוכנה פתוחה.</li>
@@ -138,7 +139,8 @@
       <p class="hint">נשמר מיד. אם הסוכן באמצע סבב – יחול מהסבב הבא.</p>
       <form id="settings">
         <label class="field"><span>מספר הטלפון שלך (לשם נשלחים הפוסטים בווצאפ)</span><input type="text" name="phone" inputmode="tel" placeholder="0501234567"></label>
-        <label class="field"><span>קישור לקבוצת ווצאפ (אם ממולא – הפוסטים נשלחים לקבוצה במקום לטלפון)</span><input type="url" name="group_link" dir="ltr" placeholder="https://chat.whatsapp.com/..."></label>
+        <label class="field"><span>שם קבוצת הווצאפ, בדיוק כמו בווצאפ (אם ממולא – הפוסטים נשלחים לקבוצה במקום לטלפון)</span><input type="text" name="group_name" placeholder="למשל: לידים לדיג'יי"></label>
+        <label class="field"><span>קישור הזמנה לקבוצה (רק אם עוד לא הצטרפת אליה)</span><input type="url" name="group_link" dir="ltr" placeholder="https://chat.whatsapp.com/..."></label>
         <label class="field"><span>כמה ימים אחורה (פוסט ישן יותר לא נשלח)</span><input type="number" name="max_post_age_days" min="1" step="1"></label>
         <label class="field"><span>כל כמה דקות לסרוק מחדש (0 = סבב אחד)</span><input type="number" name="run_every_minutes" min="0" step="1"></label>
         <label class="field"><span>כמה גלילות בפיד הראשי (0 = לא לסרוק את הפיד)</span><input type="number" name="feed_scrolls" min="0" step="1"></label>
