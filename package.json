@@ -8,7 +8,7 @@
     "start": "node index.js",
     "dry": "node index.js --dry-run",
     "test": "node --test",
-    "postinstall": "playwright install chromium"
+    "postinstall": "playwright install chromium || echo Browser download failed - the agent will use Microsoft Edge instead."
   },
   "engines": {
     "node": ">=18"

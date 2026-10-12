@@ -5,6 +5,7 @@
 // is looking for a DJ to your own WhatsApp. It only reads Facebook; it never posts there.
 
 const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 
@@ -105,6 +106,25 @@ function jsPostInfo(el) {
 // ---------- pure helpers ----------
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * The browser the agent drives: the Chromium that `npm install` downloads, or, when that
+ * download failed (slow or blocked network), the Edge that comes with Windows.
+ */
+function browserChannel() {
+  let bundled = null;
+  try {
+    bundled = chromium.executablePath();
+  } catch {
+    // no bundled browser for this platform
+  }
+  if (bundled && fs.existsSync(bundled)) return {};
+  if (process.platform === 'win32') {
+    log('הדפדפן של הסוכן לא הותקן – משתמש ב-Microsoft Edge');
+    return { channel: 'msedge' };
+  }
+  return {};
+}
 const rand = (min, max) => min + Math.random() * (max - min);
 const randInt = (min, max) => Math.floor(rand(min, max + 1));
 const humanSleep = ([min, max]) => sleep(rand(min, max) * 1000);
@@ -239,6 +259,7 @@ class DJAgent {
     let context;
     try {
       context = await chromium.launchPersistentContext(this.cfg.browser_profile_dir, {
+        ...browserChannel(),
         headless: false,
         locale: 'he-IL',
         viewport: { width: 1280, height: 900 },
