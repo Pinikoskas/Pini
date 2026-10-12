@@ -26,8 +26,10 @@ const DEFAULT_INCLUDE = [
 
 // Posts that mention a DJ but aren't someone looking to hire one.
 const DEFAULT_EXCLUDE = [
-  // DJs advertising themselves
+  // DJs advertising themselves: "אני דיג'יי", "נעים מאוד, אני תומר, דיג'יי עם...", "לאירוע שלכם"
   String.raw`(?:אני|אנחנו)\s+(?:ה)?` + DJ_WORD,
+  String.raw`(?:אני|אנחנו)\s+[^\n.!?]{1,30}?[,\-–]\s*(?:ה)?` + DJ_WORD,
+  String.raw`(?:ל|ב)?(?:אירוע|אירועים|חתונה|מסיבה)\s+שלכם|נעים מאוד|מתמח(?:ה|ים|ות)\s+ב|אני כאן|לפרטים`,
   String.raw`(?:פנוי|פנויה|פנויים|זמין|זמינה|זמינים)\s+ל(?:אירועים|תאריכים|הזמנות)`,
   String.raw`תאריכים\s+(?:אחרונים\s+)?(?:פנויים|אחרונים)`,
   String.raw`להזמנות|לתיאום אירוע|לקבלת הצעת מחיר|צרו (?:איתי |איתנו )?קשר|חייגו|חבילות|מבצע מיוחד`,

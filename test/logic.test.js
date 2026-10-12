@@ -356,3 +356,28 @@ test('rounds.json: estimated time left from the pages of previous rounds', () =>
   assert.equal(again.remainingMs(['feed', '111'], 0), 250000 + 50000); // median per page
   assert.equal(again.remainingMs(['feed', '111', 'new'], 1), 50000 + 130000); // a new group: the typical page (median of all)
 });
+
+test('a DJ ad posted in many groups: filtered, and the same text is never sent twice', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { Storage } = require('../src/storage');
+  const ad =
+    'מחפשים דיג׳יי לאירוע שלכם? נעים מאוד, אני Tomer Amiel, דיג׳יי עם אהבה ענקית למוזיקה ולאווירה טובה! ' +
+    'מתמחה במוזיקה מקפיצה. חתונות | ימי הולדת. לפרטים, הצעות מחיר בפרטי או בוואטסאפ. 058-6233584 פחות';
+  assert.equal(new PostMatcher().match(ad), null);
+  assert.ok(new PostMatcher().match("אני כלה מתחתנת בספטמבר, מחפשת דיג'יי טוב"));
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djdup-')), 'history.json');
+  const s = new Storage(file);
+  const request = "היי, מחפשת דיג'יי לבת מצווה בדצמבר באזור ירושלים, אשמח להמלצות והצעות מחיר";
+  s.record('group1/post1', '', 'notify', request);
+  assert.ok(s.textHandled(request + ' ראה עוד')); // the same post in another group
+  assert.ok(!s.textHandled("מחפשים דיג'יי לחתונה באוגוסט באזור המרכז, תשלחו הצעות"));
+});
+
+test('group names without Facebook notification text', () => {
+  const { cleanGroupName } = require('../src/groups');
+  assert.equal(cleanGroupName('לא נקראו‏בקבוצה ‏אמהות מעלה אדומים‏ יש פוסט חדש.‏‏10 דקות'), 'אמהות מעלה אדומים');
+  assert.equal(cleanGroupName('לא נקראו‏‏מאורסים 25/26‏‏: "‏אלכוהול למכירה‏"‏1 שעות'), 'מאורסים 25/26');
+  assert.equal(cleanGroupName('♣ ירושלמים וירושלמיות'), '♣ ירושלמים וירושלמיות');
+});

@@ -19,6 +19,20 @@ function jsGroupLinks() {
   return [...found].map(([id, name]) => ({ id, name }));
 }
 
+/**
+ * The group's own name, without what Facebook's group list adds around it:
+ * "לא נקראו בקבוצה X יש פוסט חדש. 10 דקות" -> "X", "לא נקראו X: "<post title>" 1 שעות" -> "X".
+ */
+function cleanGroupName(name) {
+  let n = String(name || '').replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, ' ');
+  n = n.replace(/^\s*(?:לא נקראו|לא נקרא|unread)\s*/i, '');
+  const inGroup = n.match(/^\s*בקבוצה\s+(.+?)\s+יש\s+(?:\d+\s+)?(?:פוסט|פוסטים)\s+חדש/);
+  if (inGroup) n = inGroup[1];
+  n = n.replace(/\s*:\s*["“].*$/s, ''); // ': "title of the newest post"...'
+  n = n.replace(/\s*\d+\s*(?:דקות|דקה|שעות|שעה|ימים|יום|שבועות|שבוע|דק'|ש'|י'|[mhdw])\s*$/i, '');
+  return n.replace(/\s+/g, ' ').trim();
+}
+
 function groupKey(url) {
   const m = String(url).match(/facebook\.com\/groups\/([^/?#\s]+)/);
   return m ? m[1] : null;
@@ -34,7 +48,7 @@ function loadGroupsFile(file) {
     .filter((line) => line && !line.startsWith('#'))
     .map((line) => {
       const [url, ...rest] = line.split(/\s+#\s*/);
-      return { url: url.trim(), name: rest.join(' #').trim() };
+      return { url: url.trim(), name: cleanGroupName(rest.join(' #')) };
     })
     .filter((g) => groupKey(g.url));
 }
@@ -50,7 +64,7 @@ function readAllGroups(file) {
     const id = /^https?:\/\//.test(body) ? groupKey(body) : null; // skip plain comment lines
     if (!id) continue;
     const [url, ...rest] = body.split(/\s+#\s*/);
-    out.push({ id, url: url.trim(), name: rest.join(' #').trim(), enabled });
+    out.push({ id, url: url.trim(), name: cleanGroupName(rest.join(' #')), enabled });
   }
   return out;
 }
@@ -133,7 +147,7 @@ function addGroupsToFile(file, groups) {
         '# קבוצה שנמחקה תחזור בייבוא הבא, קבוצה עם # תישאר כבויה).',
         '',
       ].join('\n') + '\n';
-  const lines = fresh.map((g) => `https://www.facebook.com/groups/${g.id}/` + (g.name ? `   # ${g.name.replace(/\s+/g, ' ')}` : ''));
+  const lines = fresh.map((g) => `https://www.facebook.com/groups/${g.id}/` + (cleanGroupName(g.name) ? `   # ${cleanGroupName(g.name)}` : ''));
   const sep = existing && !existing.endsWith('\n') ? '\n' : '';
   fs.writeFileSync(file, existing + sep + header + lines.join('\n') + (lines.length ? '\n' : ''), 'utf8');
   return fresh.length;
@@ -163,6 +177,7 @@ module.exports = {
   addGroupsToFile,
   collectJoinedGroups,
   groupKey,
+  cleanGroupName,
   jsGroupLinks,
   GroupsLastSeen,
   JOINED_GROUPS_URL,

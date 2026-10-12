@@ -571,6 +571,10 @@ class DJAgent {
       log(`⏭  דילוג – כבר טיפלנו בפוסט הזה: ${who}`);
       return { age, key: post.key };
     }
+    if (this.storage.textHandled(post.text)) {
+      log(`⏭  דילוג – אותו טקסט כבר נשלח אליך (פוסט שפורסם בכמה מקומות): ${who}`);
+      return { age, key: post.key };
+    }
 
     const ageDesc = `${post.ageText} (~${describeAge(age)})`;
     this.printPost(post, matched, ageDesc);

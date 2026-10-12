@@ -139,6 +139,7 @@ class WhatsAppWeb {
     if (this.groupName && !(await this.inGroupChat())) throw new Error(`הקבוצה "${this.groupName}" לא פתוחה בווצאפ – ההודעה לא נשלחה`);
     await this.page.bringToFront();
     await box.click();
+    await sleep(400);
     const lines = text.trim().split('\n');
     for (let i = 0; i < lines.length; i++) {
       if (lines[i]) await this.page.keyboard.insertText(lines[i]);
