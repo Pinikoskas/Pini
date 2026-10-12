@@ -216,7 +216,7 @@ test('config: panel edits single values and keeps comments; bad values rejected'
   assert.match(text, /# הסבר\nmax_post_age_days: 2\n/);
   assert.match(text, /# ווצאפ\nwhatsapp:\n  phone: "050-1234567"\n/);
   assert.deepEqual(editableValues(loadConfig(file)), {
-    phone: '050-1234567', group_name: '', group_link: '', max_post_age_days: 2, run_every_minutes: 30, feed_scrolls: 10, max_scrolls_per_group: 100,
+    phone: '050-1234567', group_name: '', group_link: '', max_post_age_days: 2, run_every_minutes: 30, feed_scrolls: 10, max_scrolls_per_group: 100, active_from: '08:00', active_until: '00:00',
   });
   assert.throws(() => updateConfigValues(file, { max_post_age_days: 0 }));
   assert.throws(() => updateConfigValues(file, { run_every_minutes: 'abc' }));
@@ -384,4 +384,53 @@ test('group names without Facebook notification text', () => {
 
 test('matcher: "נעים מאוד" alone does not filter a real request', () => {
   assert.ok(new PostMatcher().match("נעים מאוד, מחפש דיג'יי לחתונה באוגוסט"));
+});
+
+test('active hours 08:00–00:00, and weak groups every third round', () => {
+  const { inActiveHours, nextActiveTime, isDueThisRound } = require('../src/schedule');
+  const cfg = { active_from: '08:00', active_until: '00:00' };
+  const at = (h, m = 0) => new Date(2026, 9, 12, h, m);
+  assert.ok(inActiveHours(cfg, at(8)));
+  assert.ok(inActiveHours(cfg, at(23, 59)));
+  assert.ok(!inActiveHours(cfg, at(0, 0)));
+  assert.ok(!inActiveHours(cfg, at(7, 59)));
+  assert.equal(nextActiveTime(cfg, at(0, 30)).getTime(), at(8).getTime());
+  assert.equal(nextActiveTime(cfg, at(23, 50 + 40)).getTime(), new Date(2026, 9, 13, 8).getTime()); // 00:30 next day
+  assert.ok(inActiveHours({ active_from: '22:00', active_until: '06:00' }, at(2))); // overnight hours
+  assert.ok(inActiveHours({}, at(9))); // defaults
+
+  const now = Date.parse('2026-10-12T12:00:00Z');
+  const ago = (min) => new Date(now - min * 60000).toISOString();
+  const g = { groupId: '111' };
+  const opts = { everyMinutes: 30, now };
+  assert.ok(isDueThisRound({}, { ...opts, leads: [] })); // the feed
+  assert.ok(isDueThisRound(g, { ...opts, leads: [], lastCheckedAt: null })); // never scanned
+  assert.ok(!isDueThisRound(g, { ...opts, leads: [], lastCheckedAt: ago(30) })); // weak, scanned last round
+  assert.ok(isDueThisRound(g, { ...opts, leads: [], lastCheckedAt: ago(90) })); // weak, 3 rounds ago
+  const lead = { action: 'notify', groupId: '111', createdAt: ago(60 * 24 * 5) };
+  assert.ok(isDueThisRound(g, { ...opts, leads: [lead], lastCheckedAt: ago(30) })); // strong: a lead 5 days ago
+});
+
+test('broad leads: suppliers for an event without the word DJ', () => {
+  const m = new PostMatcher();
+  assert.ok(m.matchBroad('היי, אנחנו מתחתנים באוגוסט ומחפשים ספקים לחתונה, המלצות?'));
+  assert.ok(m.matchBroad('מחפשת הפקה לבר מצווה של הבן שלי בדצמבר'));
+  assert.ok(m.matchBroad('אשמח להמלצה על הגברה לאירוע של 150 איש'));
+  assert.equal(m.matchBroad('אני מפיקת אירועים עם 10 שנות ניסיון, לפרטים בפרטי'), null);
+  assert.equal(m.matchBroad("מחפשים דיג'יי לחתונה"), null); // a DJ request, not a broad lead
+  assert.equal(m.matchBroad('מחפשים ספק לחומרי בניין'), null); // no event
+  assert.ok(m.mightMatch('מחפשים ספקים לחתונה'));
+});
+
+test('config: active hours from the panel are saved as text', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { updateConfigValues, loadConfig } = require('../src/configFile');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djhours-')), 'config.yaml');
+  fs.writeFileSync(file, 'run_every_minutes: 60\n');
+  updateConfigValues(file, { active_from: '8:00', active_until: '00:00' });
+  assert.equal(loadConfig(file).active_from, '08:00');
+  assert.equal(loadConfig(file).active_until, '00:00');
+  assert.throws(() => updateConfigValues(file, { active_from: '25:00' }));
 });

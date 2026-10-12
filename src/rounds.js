@@ -42,6 +42,11 @@ class RoundStats {
     return this.rounds.slice(-n);
   }
 
+  /** Typical length of a whole round (median of the recent ones), or null. */
+  typicalRoundMs() {
+    return median(this.rounds.slice(-RECENT).map((r) => r.duration_ms).filter((ms) => ms > 0));
+  }
+
   /** Typical time for one page: its median over recent rounds, else the median of all pages. */
   pageEstimate(key) {
     const recent = this.rounds.slice(-RECENT);

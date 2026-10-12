@@ -45,13 +45,15 @@ class Storage {
     return t.length >= 40 && this.actions.some((a) => sameText(a.postText) === t);
   }
 
-  record(postKey, authorUrl, action, postText = '', { authorName = '', groupName = '' } = {}) {
+  record(postKey, authorUrl, action, postText = '', { authorName = '', groupName = '', groupId = null, broad = false } = {}) {
     this.reload();
     this.actions.push({
       postKey,
       authorUrl: authorUrl || '',
       authorName,
       groupName,
+      ...(groupId ? { groupId } : {}),
+      ...(broad ? { broad: true } : {}),
       action,
       createdAt: new Date().toISOString(),
       postText: postText.slice(0, 500),

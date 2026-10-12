@@ -6,6 +6,14 @@ const path = require('path');
 const yaml = require('js-yaml');
 
 /** Settings the panel may change: name -> how to validate the value. */
+const { parseClock } = require('./schedule');
+
+const clockValue = (label, isEnd) => (v) => {
+  const text = String(v || '').trim();
+  if (parseClock(text, { isEnd }) == null) throw new Error(`שעה לא תקינה ל${label}: ${v} (למשל 08:00)`);
+  return text.padStart(5, '0');
+};
+
 const EDITABLE = {
   phone: (v) => String(v || '').trim(),
   group_name: (v) => String(v || '').trim(),
@@ -20,6 +28,8 @@ const EDITABLE = {
   run_every_minutes: (v) => nonNegativeNumber(v, 'דקות בין סבבים'),
   feed_scrolls: (v) => nonNegativeNumber(v, 'גלילות בפיד'),
   max_scrolls_per_group: (v) => positiveNumber(v, 'גלילות בקבוצה'),
+  active_from: clockValue('תחילת שעות הפעילות', false),
+  active_until: clockValue('סוף שעות הפעילות', true),
 };
 
 function nonNegativeNumber(v, label) {
@@ -55,6 +65,8 @@ function editableValues(cfg) {
     run_every_minutes: cfg.run_every_minutes ?? 60,
     feed_scrolls: cfg.feed_scrolls ?? 40,
     max_scrolls_per_group: cfg.max_scrolls_per_group ?? 100,
+    active_from: cfg.active_from || '08:00',
+    active_until: cfg.active_until || '00:00',
   };
 }
 
@@ -71,7 +83,8 @@ function updateConfigValues(file, values) {
   }
   for (const [key, value] of Object.entries(clean)) {
     const nested = key === 'phone' || key === 'group_name' || key === 'group_link'; // under "whatsapp:"
-    const yamlValue = nested ? JSON.stringify(value) : String(value);
+    const quoted = nested || key === 'active_from' || key === 'active_until'; // "08:00" stays text
+    const yamlValue = quoted ? JSON.stringify(value) : String(value);
     if (nested) {
       const line = new RegExp(`^(\\s+${key}:).*$`, 'm');
       if (/^whatsapp:\s*$/m.test(text) && line.test(text)) {

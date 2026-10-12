@@ -19,6 +19,7 @@ const { forTerminal, setTerminalHebrewFix } = require('./terminal');
 const { log, events, setLogFile } = require('./log');
 const { loadConfig } = require('./configFile');
 const { RoundStats } = require('./rounds');
+const { inActiveHours, nextActiveTime, isDueThisRound } = require('./schedule');
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
 const OLD_POSTS_TO_STOP = 3;
@@ -108,6 +109,8 @@ function jsPostInfo(el) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pageKey = (source) => source.groupId || 'feed';
+const clock = (t) => new Date(t).toTimeString().slice(0, 5);
+const activeHoursText = (cfg) => `${cfg.active_from || '08:00'}–${cfg.active_until || '00:00'}`;
 const waTarget = (w) => (w.group_name ? `group:${w.group_name}|${w.group_link || ''}` : `phone:${w.phone || ''}`);
 
 /**
@@ -316,15 +319,40 @@ class DJAgent {
           log(`יעד הווצאפ השתנה – מתחבר ל${this.whatsapp.group_name ? 'קבוצה' : "צ'אט"} החדש`);
           await this.wa.setTarget(this.whatsapp);
         }
-        const sources = buildSources(this.cfg);
+        if (!inActiveHours(this.cfg)) {
+          const resumeAt = nextActiveTime(this.cfg).getTime();
+          log(`⏸ מחוץ לשעות הפעילות (${activeHoursText(this.cfg)}) – ממשיך ב-${clock(resumeAt)}`);
+          this.setStatus('waiting', `מחוץ לשעות הפעילות – ממשיך ב-${clock(resumeAt)}`, { nextRoundAt: resumeAt });
+          await this.waitOrStop(resumeAt - Date.now());
+          if (this.stopRequested) break;
+          continue; // re-read the settings and check the hours again
+        }
+        const everyMinutesNow = Number(this.cfg.run_every_minutes || 0);
+        const leads = this.storage.actions.filter((a) => a.action === 'notify');
+        const all = buildSources(this.cfg);
+        const sources = all.filter((s) =>
+          isDueThisRound(s, { leads, lastCheckedAt: s.groupId && this.lastSeen.checkedAt(s.groupId), everyMinutes: everyMinutesNow }),
+        );
         const keys = sources.map(pageKey);
-        log(`מתחיל סבב: ${sources.length} עמודים לסריקה`);
+        const skipped = all.length - sources.length;
+        log(`מתחיל סבב: ${sources.length} עמודים לסריקה` + (skipped ? ` (${skipped} קבוצות בלי פוסטים מתאימים ב-30 יום נסרקות כל סבב שלישי – לא בסבב הזה)` : ''));
+        const usualMs = this.rounds.typicalRoundMs();
+        let slowAlertSent = false;
         const roundStart = Date.now();
         const pageMs = {};
         this.postsThisRound = 0;
         this.leadsThisRound = 0;
         for (const [i, source] of sources.entries()) {
           if (this.stopRequested) break;
+          const tookMs = Date.now() - roundStart;
+          if (!slowAlertSent && usualMs && tookMs > Math.max(2 * usualMs, usualMs + 30 * 60 * 1000)) {
+            slowAlertSent = true;
+            await this.alert(
+              `⚠️ הסבב נמשך כבר ${Math.round(tookMs / 60000)} דקות (בדרך כלל ${Math.round(usualMs / 60000)}). ` +
+                `ייתכן שהבוט נתקע או שהאינטרנט איטי – כדאי להציץ במחשב.`,
+              page,
+            );
+          }
           const left = this.rounds.remainingMs(keys, i, Object.values(pageMs));
           this.setStatus('scanning', `${source.label} (${i + 1}/${sources.length})`, {
             progress: { done: i, total: sources.length },
@@ -357,9 +385,14 @@ class DJAgent {
         }
         const everyMinutes = Number(this.cfg.run_every_minutes || 0);
         if (this.stopRequested || !everyMinutes) break;
-        const nextRoundAt = Date.now() + everyMinutes * 60 * 1000;
-        log(`סבב הסתיים. נשלחו לווצאפ עד עכשיו: ${this.notificationsSent}. סבב הבא בעוד ${everyMinutes} דקות`);
-        this.setStatus('waiting', `ממתין לסבב הבא`, { nextRoundAt });
+        let nextRoundAt = Date.now() + everyMinutes * 60 * 1000;
+        if (!inActiveHours(this.cfg, new Date(nextRoundAt))) {
+          nextRoundAt = nextActiveTime(this.cfg, new Date(nextRoundAt)).getTime();
+          log(`סבב הסתיים. נשלחו לווצאפ עד עכשיו: ${this.notificationsSent}. ⏸ הבוט מושהה עד ${clock(nextRoundAt)} (שעות פעילות ${activeHoursText(this.cfg)})`);
+        } else {
+          log(`סבב הסתיים. נשלחו לווצאפ עד עכשיו: ${this.notificationsSent}. סבב הבא בעוד ${everyMinutes} דקות`);
+        }
+        this.setStatus('waiting', inActiveHours(this.cfg, new Date(nextRoundAt - 1)) ? 'ממתין לסבב הבא' : `מושהה עד ${clock(nextRoundAt)}`, { nextRoundAt });
         await this.waitOrStop(nextRoundAt - Date.now());
         if (this.stopRequested) break;
       }
@@ -386,7 +419,7 @@ class DJAgent {
   }
 
   async isLoginPage(page) {
-    return page.url().includes('login') || (await page.locator('input[name="email"], input[name="pass"]').count()) > 0;
+    return /login|checkpoint/.test(page.url()) || (await page.locator('input[name="email"], input[name="pass"]').count()) > 0;
   }
 
   async ensureLoggedIn(page) {
@@ -394,24 +427,52 @@ class DJAgent {
     await sleep(3000);
     if (!(await this.isLoginPage(page))) return;
     log('לא מחובר לפייסבוק. התחבר בחלון הדפדפן שנפתח – הסוכן ימשיך לבד אחרי ההתחברות.');
-    const deadline = Date.now() + 10 * 60 * 1000;
-    while (Date.now() < deadline) {
+    await this.waitForLogin(page);
+  }
+
+  async waitForLogin(page, minutes = 10) {
+    const deadline = Date.now() + minutes * 60 * 1000;
+    while (Date.now() < deadline && !this.stopRequested) {
       await sleep(3000);
       if (!(await this.isLoginPage(page))) {
         log('התחברות זוהתה ✔');
+        this.fbAlertSent = false;
         await sleep(3000);
         return;
       }
     }
-    throw new Error('לא בוצעה התחברות תוך 10 דקות.');
+    throw new Error(`לא בוצעה התחברות לפייסבוק תוך ${minutes} דקות.`);
+  }
+
+  /** A warning to WhatsApp (not in test mode). A failure here never stops the scan. */
+  async alert(text, page) {
+    log(text);
+    if (this.dryRun || !this.notify) return;
+    try {
+      await this.notify(text);
+    } catch (e) {
+      log(`   ✘ ההתראה לא נשלחה לווצאפ: ${e.message.split('\n')[0]}`);
+    }
+    if (page) await page.bringToFront().catch(() => {});
   }
 
   // ---------- scanning ----------
 
   async scanSource(page, source) {
+    this.currentSource = source;
     log(`סורק: ${source.label}`);
     await page.goto(source.url, { waitUntil: 'domcontentloaded' });
     await sleep(4000);
+    if (await this.isLoginPage(page)) {
+      // Facebook logged the agent out (or asks to confirm the account) in the middle of a round.
+      if (!this.fbAlertSent) {
+        this.fbAlertSent = true;
+        await this.alert('⚠️ פייסבוק התנתק – צריך להתחבר מחדש בחלון הדפדפן של הבוט במחשב. הסבב ימשיך לבד אחרי ההתחברות.', page);
+      }
+      await this.waitForLogin(page, 30);
+      await page.goto(source.url, { waitUntil: 'domcontentloaded' });
+      await sleep(4000);
+    }
     const failuresBefore = this.sendFailures;
     const { newest, ages } = await this.scrollAndCheck(page, source);
     if (source.groupId) this.reportOrder(ages);
@@ -553,8 +614,11 @@ class DJAgent {
 
     const post = await this.readPost(page, el);
     const age = parsePostAge(post.ageText);
-    const matched = maybeDj && this.matcher.match(post.text);
+    let matched = maybeDj && this.matcher.match(post.text);
+    const broad = !matched && maybeDj && this.matcher.matchBroad(post.text);
+    if (broad) matched = broad;
     if (!matched) return { age, key: post.key };
+    post.broad = !!broad;
     if (this.seenThisRun.has(post.key)) return { age, key: post.key };
     this.seenThisRun.add(post.key);
 
@@ -587,7 +651,12 @@ class DJAgent {
     try {
       await this.notify(formatPostMessage(post, ageDesc));
       this.notificationsSent++;
-      this.storage.record(post.key, post.authorUrl, 'notify', post.text, { authorName: post.authorName, groupName: post.groupName });
+      this.storage.record(post.key, post.authorUrl, 'notify', post.text, {
+        authorName: post.authorName,
+        groupName: post.groupName,
+        groupId: this.currentSource && this.currentSource.groupId,
+        broad: post.broad,
+      });
       events.emit('lead', this.storage.recentLeads(1)[0]);
       this.setStatus(this.status.state, this.status.detail);
       log('   ✔ נשלח אליך לווצאפ');
@@ -603,7 +672,7 @@ class DJAgent {
     const preview = post.text.replace(/\s+/g, ' ').slice(0, 250);
     const bar = '='.repeat(70);
     const lines = [
-      `🎯 נמצא פוסט מתאים  |  ${post.authorName || '?'}${post.groupName ? `  |  ${post.groupName}` : ''}  |  עלה: ${ageDesc}`,
+      `${post.broad ? '🔎 ליד רחב' : '🎯 נמצא פוסט מתאים'}  |  ${post.authorName || '?'}${post.groupName ? `  |  ${post.groupName}` : ''}  |  עלה: ${ageDesc}`,
       `   ביטוי שזוהה: «${matched}»`,
       `   ${preview}`,
     ];

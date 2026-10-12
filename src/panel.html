@@ -136,6 +136,10 @@
     <li><b>רק פוסטים חדשים:</b> שולח רק פוסטים מהימים האחרונים (לפי "כמה ימים אחורה" בהגדרות).</li>
     <li><b>שולח לך לווצאפ:</b> כל פוסט מתאים מגיע אליך לצ'אט "אני" (או לקבוצת הווצאפ שבחרת), עם השם, הקבוצה, מתי עלה, הטקסט וקישור. אתה פונה לאנשים בעצמך.</li>
     <li><b>מראה התקדמות:</b> עמוד X מתוך Y, זמן משוער לסיום הסבב לפי סבבים קודמים, וגרף של פוסטים מתאימים בכל סבב.</li>
+    <li><b>שעות פעילות:</b> עובד רק בשעות שהגדרת (למשל 08:00–00:00). סבב שהתחיל מסתיים, ואז הבוט מושהה עד הבוקר.</li>
+    <li><b>קבוצות חזקות קודם:</b> קבוצה שהביאה פוסט מתאים ב-30 הימים האחרונים נסרקת בכל סבב; קבוצה בלי פוסטים מתאימים – כל סבב שלישי.</li>
+    <li><b>לידים רחבים:</b> גם פוסטים שמחפשים ספקים / הפקה / הגברה לאירוע בלי לכתוב דיג'יי – מסומנים "ליד רחב".</li>
+    <li><b>התראות:</b> הודעה לווצאפ אם פייסבוק התנתק, או אם סבב נמשך הרבה יותר מהרגיל.</li>
     <li><b>מעדכן בסוף כל סבב:</b> שולח לווצאפ "סיימתי את הסבב בשעה ..." כשהסבב נגמר.</li>
     <li><b>פעם אחת בלבד:</b> פוסט שכבר נשלח אליך לא יישלח שוב.</li>
     <li><b>סריקה חכמה בקבוצות:</b> הקבוצות נסרקות מהחדש לישן. הבוט זוכר את הפוסט האחרון שבדק בכל קבוצה, ובסבב הבא בודק רק מה שנוסף מאז.</li>
@@ -156,7 +160,11 @@
         <label class="field"><span>שם קבוצת הווצאפ, בדיוק כמו בווצאפ (אם ממולא – הפוסטים נשלחים לקבוצה במקום לטלפון)</span><input type="text" name="group_name" placeholder="למשל: לידים לדיג'יי"></label>
         <label class="field"><span>קישור הזמנה לקבוצה (רק אם עוד לא הצטרפת אליה)</span><input type="url" name="group_link" dir="ltr" placeholder="https://chat.whatsapp.com/..."></label>
         <label class="field"><span>כמה ימים אחורה (פוסט ישן יותר לא נשלח)</span><input type="number" name="max_post_age_days" min="1" step="1"></label>
-        <label class="field"><span>כל כמה דקות לסרוק מחדש (0 = סבב אחד)</span><input type="number" name="run_every_minutes" min="0" step="1"></label>
+        <label class="field"><span>כל כמה דקות לסרוק מחדש (0 = סבב אחד; מומלץ 20–30 – מי שפונה ראשון סוגר)</span><input type="number" name="run_every_minutes" min="0" step="1"></label>
+        <div class="row" style="gap:12px">
+          <label class="field" style="flex:1"><span>פועל מהשעה</span><input type="time" name="active_from"></label>
+          <label class="field" style="flex:1"><span>עד השעה</span><input type="time" name="active_until"></label>
+        </div>
         <label class="field"><span>כמה גלילות בפיד הראשי (0 = לא לסרוק את הפיד)</span><input type="number" name="feed_scrolls" min="0" step="1"></label>
         <label class="field"><span>מקסימום גלילות בכל קבוצה</span><input type="number" name="max_scrolls_per_group" min="1" step="1"></label>
         <div class="row"><button type="submit" class="primary" id="saveSettings" disabled>שמור הגדרות</button><span id="settingsMsg" class="msg"></span></div>
@@ -254,7 +262,9 @@ function renderDetail() {
   let text = status.detail || '';
   if (status.state === 'waiting' && status.nextRoundAt) {
     const left = Math.max(0, Math.round((status.nextRoundAt - Date.now()) / 1000));
-    text = `סבב הבא בעוד ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+    text = left >= 3600
+      ? `${status.detail} (בעוד ${Math.floor(left / 3600)}:${String(Math.floor((left % 3600) / 60)).padStart(2, '0')} שע')`
+      : `סבב הבא בעוד ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
   }
   $('detail').textContent = text;
   renderProgress();
@@ -279,7 +289,7 @@ function renderProgress() {
       ? `סיום משוער: <b>${clock(status.etaAt)}</b> (עוד ${status.etaAt > Date.now() ? '~' + mins(status.etaAt - Date.now()) : 'רגע'})`
       : 'זמן משוער יחושב אחרי הסבב הראשון';
   } else {
-    $('progressText').textContent = status.state === 'waiting' ? 'הסבב הסתיים – ממתין לסבב הבא' : 'הסוכן לא בסבב';
+    $('progressText').textContent = status.state === 'waiting' ? (status.detail || 'הסבב הסתיים – ממתין לסבב הבא') : 'הסוכן לא בסבב';
     $('etaText').textContent = '';
   }
 }
@@ -450,7 +460,7 @@ function renderLeads() {
       <div class="lead">
         <button class="xbtn" data-forget="${esc(l.postKey)}" title="מחק מההיסטוריה">✕</button>
         <div class="who">${esc(l.authorName || 'לא ידוע')}</div>
-        <div class="meta">${l.groupName ? `בקבוצה ${esc(l.groupName)} · ` : ''}נשלח ${esc(timeAgo(l.createdAt))}</div>
+        <div class="meta">${l.broad ? '🔎 ליד רחב · ' : ''}${l.groupName ? `בקבוצה ${esc(l.groupName)} · ` : ''}נשלח ${esc(timeAgo(l.createdAt))}</div>
         <p>${esc(l.postText)}</p>
         ${/^https?:/.test(l.postKey) ? `<a href="${esc(l.postKey)}" target="_blank" rel="noopener">פתח את הפוסט ↗</a>` : ''}
       </div>`).join('')

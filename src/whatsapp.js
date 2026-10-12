@@ -4,7 +4,7 @@ function formatPostMessage(post, ageDesc) {
   const text = post.text.replace(/\s+/g, ' ').trim();
   const preview = text.length > 400 ? text.slice(0, 400) + '…' : text;
   const lines = [
-    "🎧 *נמצא פוסט: מחפשים דיג'יי!*",
+    post.broad ? '🔎 *ליד רחב: מחפשים ספקים לאירוע*' : "🎧 *נמצא פוסט: מחפשים דיג'יי!*",
     `👤 ${post.authorName || 'לא ידוע'}`,
     ...(post.groupName ? [`👥 בקבוצה: ${post.groupName}`] : []),
     `🕒 עלה: ${ageDesc}`,

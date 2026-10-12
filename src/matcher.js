@@ -24,6 +24,16 @@ const DEFAULT_INCLUDE = [
   EVENT + String.raw`[^\n.!?]{0,60}?` + DJ_WORD + String.raw`[^\n.!?]{0,40}\?`,
 ];
 
+// "Broad leads": no DJ mentioned, but someone planning an event looks for suppliers, a production,
+// sound or music ("מחפשים ספקים לחתונה", "מחפשת הפקה לבר מצווה"). Sent marked as a broad lead.
+const SUPPLIER = String.raw`(?:ספקים|ספק|הפקה|הפקת|הפקות|מפיק|מפיקה|מפיקת|הגברה|מוזיקה|הפעלה|הפעלות)`;
+const DEFAULT_BROAD = [ASK + String.raw`[^\n.!]{0,40}?` + SUPPLIER];
+const BROAD_EXCLUDE = [
+  // Suppliers advertising themselves: "אני מפיקת אירועים", "אנחנו חברת הפקות"
+  String.raw`(?:אני|אנחנו)\s+(?:חברת\s+)?` + SUPPLIER,
+  String.raw`(?:מחפש|מחפשת|מחפשים)\s+(?:עבודה|לקוחות|ספקים\s+חדשים\s+ל(?:עסק|חברה))`,
+];
+
 // Posts that mention a DJ but aren't someone looking to hire one.
 const DEFAULT_EXCLUDE = [
   // DJs advertising themselves: "אני דיג'יי", "נעים מאוד, אני תומר, דיג'יי עם...", "לאירוע שלכם"
@@ -68,12 +78,30 @@ class PostMatcher {
     const compile = (list) => list.map((p) => new RegExp(p, 'i'));
     this.include = compile(include && include.length ? include : DEFAULT_INCLUDE);
     this.exclude = compile(exclude && exclude.length ? exclude : DEFAULT_EXCLUDE);
+    this.broad = compile(DEFAULT_BROAD);
+    this.broadExclude = compile(BROAD_EXCLUDE);
+    this.event = new RegExp(EVENT, 'i');
+  }
+
+  /**
+   * A broad lead: an event (wedding, bar mitzvah...) and a request for suppliers / production /
+   * sound / music, with no DJ in the text. Returns the matched phrase, or null.
+   */
+  matchBroad(text) {
+    const t = normalize(text);
+    if (new RegExp(DJ_WORD, 'i').test(t) || !this.event.test(t)) return null;
+    if (this.exclude.some((rx) => rx.test(t)) || this.broadExclude.some((rx) => rx.test(t))) return null;
+    for (const rx of this.broad) {
+      const m = t.match(rx);
+      if (m) return m[0];
+    }
+    return null;
   }
 
   /** Cheap pre-check (ignores exclusions) used before reading the post in detail. */
   mightMatch(text) {
     const t = normalize(text);
-    if (this.include.some((rx) => rx.test(t))) return true;
+    if (this.include.some((rx) => rx.test(t)) || this.broad.some((rx) => rx.test(t))) return true;
     return TRUNCATED.test(t.trim()) && REQUEST_HINT.test(t);
   }
 

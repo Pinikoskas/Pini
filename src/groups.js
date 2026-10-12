@@ -105,6 +105,11 @@ class GroupsLastSeen {
     if (this.file) fs.writeFileSync(this.file, JSON.stringify(this.data, null, 2), 'utf8');
   }
 
+  /** When the group was last scanned (ISO time), or null. */
+  checkedAt(groupId) {
+    return (this.data[groupId] && this.data[groupId].checked_at) || null;
+  }
+
   newestPost(groupId) {
     return (this.data[groupId] && this.data[groupId].newest_post) || null;
   }
