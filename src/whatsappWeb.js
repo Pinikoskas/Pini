@@ -1,10 +1,13 @@
-// Send WhatsApp messages to yourself by driving WhatsApp Web in the same browser.
+// Send WhatsApp messages (to yourself, or to a group by its invite link) by driving WhatsApp Web
+// in the same browser.
 // First run: scan the QR code once (WhatsApp on phone → Linked devices). The login is
 // kept in the browser profile, like the Facebook login.
 
 const COMPOSE_BOX = 'footer div[contenteditable="true"], div[contenteditable="true"][data-tab="10"]';
 const QR_CODE = 'canvas[aria-label*="QR" i], canvas[aria-label*="scan" i], div[data-ref] canvas';
 const INVALID_NUMBER = /invalid|אינו תקין|לא תקין/i;
+const BAD_INVITE = /invalid|expired|reset|revoked|לא תקין|פג תוקף|אופס|אינו פעיל|בוטל/i;
+const JOIN_OR_OPEN = /join|הצטרפ|open chat|open group|view group|פתיחת הצ'אט|פתיחת צ'אט|פתח צ'אט|פתיחת הקבוצה|הצגת הקבוצה|צפייה בקבוצה/i;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -16,20 +19,32 @@ function normalizePhone(phone) {
   return digits;
 }
 
+/** "https://chat.whatsapp.com/AbC123" -> "AbC123" (null if it isn't a group invite link). */
+function groupInviteCode(link) {
+  const m = String(link || '').match(/chat\.whatsapp\.com\/(?:invite\/)?([A-Za-z0-9]{10,})/);
+  return m ? m[1] : null;
+}
+
 class WhatsAppWeb {
-  constructor(context, phone, { baseUrl = 'https://web.whatsapp.com', log = console.log } = {}) {
+  /** target: { phone } for your own chat, or { group_link } for a group (the group wins). */
+  constructor(context, target, { baseUrl = 'https://web.whatsapp.com', log = console.log } = {}) {
     this.context = context;
-    this.phone = normalizePhone(phone);
     this.baseUrl = baseUrl;
     this.log = log;
     this.page = null;
+    this.setTargetOnly(target);
+  }
+
+  setTargetOnly(target = {}) {
+    this.phone = normalizePhone(target.phone);
+    this.groupCode = groupInviteCode(target.group_link);
   }
 
   chatUrl() {
-    return `${this.baseUrl}/send?phone=${this.phone}`;
+    return this.groupCode ? `${this.baseUrl}/accept?code=${this.groupCode}` : `${this.baseUrl}/send?phone=${this.phone}`;
   }
 
-  /** Opens WhatsApp Web on your own chat; waits (up to 10 min) for a QR scan if needed. */
+  /** Opens WhatsApp Web on the chat (or group); waits (up to 10 min) for a QR scan if needed. */
   async ensureReady() {
     if (!this.page || this.page.isClosed()) this.page = await this.context.newPage();
     await this.page.goto(this.chatUrl(), { waitUntil: 'domcontentloaded' });
@@ -37,9 +52,22 @@ class WhatsAppWeb {
     const deadline = Date.now() + 10 * 60 * 1000;
     while (Date.now() < deadline) {
       if (await this.page.locator(COMPOSE_BOX).first().isVisible().catch(() => false)) return;
-      const bodyText = await this.page.locator('[role="dialog"]').first().innerText({ timeout: 500 }).catch(() => '');
-      if (INVALID_NUMBER.test(bodyText)) {
-        throw new Error(`ווצאפ: המספר ${this.phone} לא תקין. בדוק את whatsapp.phone ב-config.yaml`);
+      const dialog = this.page.locator('[role="dialog"]').first();
+      const bodyText = await dialog.innerText({ timeout: 500 }).catch(() => '');
+      if (this.groupCode) {
+        // The invite link opens a "join group" window (or the chat, if you're already in it).
+        const button = dialog.getByRole('button', { name: JOIN_OR_OPEN }).first();
+        if (await button.isVisible().catch(() => false)) {
+          this.log('מצטרף לקבוצת הווצאפ / פותח אותה...');
+          await button.click().catch(() => {});
+          await sleep(3000);
+          continue;
+        }
+        if (bodyText && BAD_INVITE.test(bodyText)) {
+          throw new Error('ווצאפ: קישור הקבוצה לא תקין או פג תוקף. העתק קישור הזמנה חדש מהקבוצה (פרטי הקבוצה ← הזמנה באמצעות קישור)');
+        }
+      } else if (INVALID_NUMBER.test(bodyText)) {
+        throw new Error(`ווצאפ: המספר ${this.phone} לא תקין. בדוק את מספר הטלפון בהגדרות`);
       }
       if (!askedForQr && (await this.page.locator(QR_CODE).first().isVisible().catch(() => false))) {
         this.log('סרוק את קוד ה-QR בלשונית של ווצאפ: בטלפון → ווצאפ → מכשירים מקושרים → קישור מכשיר');
@@ -50,9 +78,9 @@ class WhatsAppWeb {
     throw new Error('ווצאפ ווב לא נטען תוך 10 דקות (לא נסרק QR?)');
   }
 
-  /** Switches to another phone's chat (the number was changed in the settings). */
-  async setPhone(phone) {
-    this.phone = normalizePhone(phone);
+  /** Switches to another chat or group (changed in the settings). */
+  async setTarget(target) {
+    this.setTargetOnly(target);
     await this.ensureReady();
   }
 
@@ -78,4 +106,4 @@ class WhatsAppWeb {
   }
 }
 
-module.exports = { WhatsAppWeb, normalizePhone };
+module.exports = { WhatsAppWeb, normalizePhone, groupInviteCode };

@@ -8,6 +8,13 @@ const yaml = require('js-yaml');
 /** Settings the panel may change: name -> how to validate the value. */
 const EDITABLE = {
   phone: (v) => String(v || '').trim(),
+  group_link: (v) => {
+    const link = String(v || '').trim();
+    if (link && !/chat\.whatsapp\.com\/(?:invite\/)?[A-Za-z0-9]{10,}/.test(link)) {
+      throw new Error('קישור הקבוצה צריך להיות קישור הזמנה של ווצאפ, למשל https://chat.whatsapp.com/AbCdEf123456');
+    }
+    return link;
+  },
   max_post_age_days: (v) => positiveNumber(v, 'ימים אחורה'),
   run_every_minutes: (v) => nonNegativeNumber(v, 'דקות בין סבבים'),
   feed_scrolls: (v) => nonNegativeNumber(v, 'גלילות בפיד'),
@@ -40,6 +47,7 @@ function loadConfig(file) {
 function editableValues(cfg) {
   return {
     phone: (cfg.whatsapp && cfg.whatsapp.phone) || '',
+    group_link: (cfg.whatsapp && cfg.whatsapp.group_link) || '',
     max_post_age_days: cfg.max_post_age_days ?? 3,
     run_every_minutes: cfg.run_every_minutes ?? 60,
     feed_scrolls: cfg.feed_scrolls ?? 40,
@@ -59,12 +67,16 @@ function updateConfigValues(file, values) {
     clean[key] = EDITABLE[key](value);
   }
   for (const [key, value] of Object.entries(clean)) {
-    const yamlValue = key === 'phone' ? JSON.stringify(value) : String(value);
-    if (key === 'phone') {
-      if (/^whatsapp:\s*$/m.test(text) && /^\s+phone:.*$/m.test(text)) {
-        text = text.replace(/^(\s+phone:).*$/m, `$1 ${yamlValue}`);
+    const nested = key === 'phone' || key === 'group_link'; // under "whatsapp:"
+    const yamlValue = nested ? JSON.stringify(value) : String(value);
+    if (nested) {
+      const line = new RegExp(`^(\\s+${key}:).*$`, 'm');
+      if (/^whatsapp:\s*$/m.test(text) && line.test(text)) {
+        text = text.replace(line, `$1 ${yamlValue}`);
+      } else if (/^whatsapp:\s*$/m.test(text)) {
+        text = text.replace(/^whatsapp:\s*$/m, `whatsapp:\n  ${key}: ${yamlValue}`);
       } else {
-        text = text.replace(/\s*$/, `\n\nwhatsapp:\n  phone: ${yamlValue}\n`);
+        text = text.replace(/\s*$/, `\n\nwhatsapp:\n  ${key}: ${yamlValue}\n`);
       }
     } else if (new RegExp(`^${key}:.*$`, 'm').test(text)) {
       text = text.replace(new RegExp(`^(${key}:).*$`, 'm'), `$1 ${yamlValue}`);

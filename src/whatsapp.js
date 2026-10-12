@@ -18,7 +18,7 @@ function formatPostMessage(post, ageDesc) {
 }
 
 function checkWhatsAppSettings(settings) {
-  if (!settings || !settings.phone) return 'חסר מספר טלפון ב-config.yaml (whatsapp.phone).';
+  if (!settings || (!settings.phone && !settings.group_link)) return 'חסר מספר טלפון או קישור לקבוצת ווצאפ בהגדרות.';
   return null;
 }
 

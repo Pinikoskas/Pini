@@ -106,6 +106,7 @@ function jsPostInfo(el) {
 // ---------- pure helpers ----------
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const waTarget = (w) => (w.group_link ? `group:${w.group_link}` : `phone:${w.phone || ''}`);
 
 /**
  * The browser the agent drives: the Chromium that `npm install` downloads, or, when that
@@ -247,7 +248,7 @@ class DJAgent {
   async setupNotifier(context) {
     log('פותח ווצאפ ווב...');
     this.setStatus('starting', 'מתחבר לווצאפ ווב');
-    this.wa = new WhatsAppWeb(context, this.whatsapp.phone, { log });
+    this.wa = new WhatsAppWeb(context, this.whatsapp, { log });
     await this.wa.ensureReady();
     log('ווצאפ ווב מחובר ✔');
     this.notify = (text) => this.wa.send(text);
@@ -300,13 +301,13 @@ class DJAgent {
       await this.ensureLoggedIn(page);
       for (;;) {
         // Settings and groups changed since the last round take effect now.
-        const phoneBefore = this.whatsapp.phone;
+        const targetBefore = waTarget(this.whatsapp);
         this.reloadConfig();
         this.storage.reload(); // history / bookmarks may have been cleared from the panel
         this.lastSeen.reload();
-        if (this.wa && this.whatsapp.phone !== phoneBefore) {
-          log(`מספר הטלפון השתנה – מתחבר לצ'אט החדש בווצאפ`);
-          await this.wa.setPhone(this.whatsapp.phone);
+        if (this.wa && waTarget(this.whatsapp) !== targetBefore) {
+          log(`יעד הווצאפ השתנה – מתחבר ל${this.whatsapp.group_link ? 'קבוצה' : "צ'אט"} החדש`);
+          await this.wa.setTarget(this.whatsapp);
         }
         const sources = buildSources(this.cfg);
         log(`מתחיל סבב: ${sources.length} עמודים לסריקה`);

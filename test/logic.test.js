@@ -216,7 +216,7 @@ test('config: panel edits single values and keeps comments; bad values rejected'
   assert.match(text, /# הסבר\nmax_post_age_days: 2\n/);
   assert.match(text, /# ווצאפ\nwhatsapp:\n  phone: "050-1234567"\n/);
   assert.deepEqual(editableValues(loadConfig(file)), {
-    phone: '050-1234567', max_post_age_days: 2, run_every_minutes: 30, feed_scrolls: 10, max_scrolls_per_group: 100,
+    phone: '050-1234567', group_link: '', max_post_age_days: 2, run_every_minutes: 30, feed_scrolls: 10, max_scrolls_per_group: 100,
   });
   assert.throws(() => updateConfigValues(file, { max_post_age_days: 0 }));
   assert.throws(() => updateConfigValues(file, { run_every_minutes: 'abc' }));
@@ -315,4 +315,25 @@ test('matcher: more ways of asking, and posts that only mention a DJ', () => {
   // A long post cut at "See more" is opened when its start looks like a request.
   assert.ok(m.mightMatch('היי לכולם, אנחנו מתחתנים באוגוסט ומחפשים ספקים... ראה עוד'));
   assert.ok(!m.mightMatch('איזה כיף היה בים היום... ראה עוד'));
+});
+
+test('whatsapp group: invite link instead of a phone number', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { groupInviteCode } = require('../src/whatsappWeb');
+  const { checkWhatsAppSettings } = require('../src/whatsapp');
+  const { updateConfigValues, loadConfig, editableValues } = require('../src/configFile');
+  assert.equal(groupInviteCode('https://chat.whatsapp.com/F9zUQLdamYLIf5QgfYeqSN'), 'F9zUQLdamYLIf5QgfYeqSN');
+  assert.equal(groupInviteCode('chat.whatsapp.com/invite/F9zUQLdamYLIf5QgfYeqSN?x=1'), 'F9zUQLdamYLIf5QgfYeqSN');
+  assert.equal(groupInviteCode('https://www.facebook.com/'), null);
+  assert.equal(checkWhatsAppSettings({ phone: '', group_link: 'https://chat.whatsapp.com/F9zUQLdamYLIf5QgfYeqSN' }), null);
+  // An older config.yaml without group_link: the panel adds it under "whatsapp:".
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djgrp-')), 'config.yaml');
+  fs.writeFileSync(file, 'max_post_age_days: 3\nwhatsapp:\n  phone: "0501111111"\n\nrun_every_minutes: 60\n');
+  updateConfigValues(file, { group_link: 'https://chat.whatsapp.com/F9zUQLdamYLIf5QgfYeqSN' });
+  assert.deepEqual(loadConfig(file).whatsapp, { phone: '0501111111', group_link: 'https://chat.whatsapp.com/F9zUQLdamYLIf5QgfYeqSN' });
+  updateConfigValues(file, { group_link: '' });
+  assert.equal(editableValues(loadConfig(file)).group_link, '');
+  assert.throws(() => updateConfigValues(file, { group_link: 'https://example.com/x' }));
 });
