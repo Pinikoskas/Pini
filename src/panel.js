@@ -11,6 +11,7 @@ const { loadConfig, editableValues, updateConfigValues } = require('./configFile
 const { readAllGroups, setGroupsEnabled, GroupsLastSeen } = require('./groups');
 const { checkWhatsAppSettings } = require('./whatsapp');
 const { Storage } = require('./storage');
+const { RoundStats } = require('./rounds');
 const { log, events, recentLogs, clearRecent } = require('./log');
 
 const PAGE = path.join(__dirname, 'panel.html');
@@ -36,6 +37,7 @@ function startPanel({ configPath, port }) {
       groups: readAllGroups(cfg.groups_file),
       leads: new Storage(cfg.history_file).recentLeads(30),
       bookmarks: bookmarks(cfg),
+      rounds: new RoundStats(cfg.rounds_file).list(30),
       logs: recentLogs(),
     };
   }
@@ -155,7 +157,7 @@ function startPanel({ configPath, port }) {
     clearTimeout(quitTimer);
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
     const send = (type) => (data) => res.write(`event: ${type}\ndata: ${JSON.stringify(data ?? {})}\n\n`);
-    const handlers = { log: send('log'), status: send('status'), lead: send('lead'), groups: send('groups'), cleared: send('cleared'), bookmarks: send('bookmarks') };
+    const handlers = { log: send('log'), status: send('status'), lead: send('lead'), groups: send('groups'), cleared: send('cleared'), bookmarks: send('bookmarks'), rounds: send('rounds') };
     for (const [type, fn] of Object.entries(handlers)) events.on(type, fn);
     const ping = setInterval(() => res.write(': ping\n\n'), 25000);
     req.on('close', () => {

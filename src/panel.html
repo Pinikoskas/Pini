@@ -11,14 +11,14 @@
     --bg: #f4f5f7; --card: #ffffff; --text: #1d2330; --muted: #6b7280; --line: #e3e6eb;
     --accent: #6d28d9; --accent-soft: #ede9fe; --ok: #15803d; --ok-soft: #dcfce7;
     --warn: #b45309; --warn-soft: #fef3c7; --bad: #b91c1c; --bad-soft: #fee2e2;
-    --log-bg: #0f1420; --log-text: #d6dbe5;
+    --log-bg: #0f1420; --log-text: #d6dbe5; --chart: #6d28d9; --grid: #eceef2;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #0d1117; --card: #161b22; --text: #e6e9ef; --muted: #8b95a5; --line: #2a313c;
       --accent: #a78bfa; --accent-soft: #2e2550; --ok: #4ade80; --ok-soft: #12331f;
       --warn: #fbbf24; --warn-soft: #3a2c0b; --bad: #f87171; --bad-soft: #3b1414;
-      --log-bg: #0a0d13; --log-text: #c9d1dc;
+      --log-bg: #0a0d13; --log-text: #c9d1dc; --chart: #8b5cf6; --grid: #222833;
     }
   }
   * { box-sizing: border-box; }
@@ -90,6 +90,19 @@
   .mark .when { color: var(--muted); font-size: 13px; white-space: nowrap; }
   .mark a { color: var(--accent); font-size: 13px; white-space: nowrap; }
   .stat b { color: var(--text); }
+  .bar-track { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; margin: 8px 0 6px; }
+  .bar-fill { height: 100%; width: 0; background: var(--chart); border-radius: 999px; transition: width .4s; }
+  .progress-text { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+  .progress-text b { color: var(--text); }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0 10px; }
+  .tile { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  .tile .k { font-size: 12.5px; color: var(--muted); }
+  .tile .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: 170px; overflow: visible; }
+  .chart .tip { position: absolute; pointer-events: none; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 13px; box-shadow: 0 6px 18px rgba(0,0,0,.15); white-space: nowrap; transform: translate(50%, -100%); display: none; }
+  .chart-title { font-size: 14px; font-weight: 600; margin-top: 4px; }
+  .chart-empty { color: var(--muted); font-size: 14px; padding: 24px 0; text-align: center; }
   dialog.about { max-width: 560px; width: calc(100% - 32px); border: 1px solid var(--line); border-radius: 14px; padding: 0; background: var(--card); color: var(--text); box-shadow: 0 20px 50px rgba(0,0,0,.3); }
   dialog.about::backdrop { background: rgba(0,0,0,.45); }
   dialog.about .in { padding: 22px 24px; }
@@ -122,6 +135,7 @@
     <li><b>מזהה מי מחפש דיג'יי:</b> "מחפש דיג'יי", "צריכים DJ לחתונה", "ממליצים על תקליטן" וכו'. מדלג על דיג'יים שמפרסמים את עצמם, על מי שמחפש קורס DJ ועל קנייה ומכירה של ציוד.</li>
     <li><b>רק פוסטים חדשים:</b> שולח רק פוסטים מהימים האחרונים (לפי "כמה ימים אחורה" בהגדרות).</li>
     <li><b>שולח לך לווצאפ:</b> כל פוסט מתאים מגיע אליך לצ'אט "אני" (או לקבוצת הווצאפ שבחרת), עם השם, הקבוצה, מתי עלה, הטקסט וקישור. אתה פונה לאנשים בעצמך.</li>
+    <li><b>מראה התקדמות:</b> עמוד X מתוך Y, זמן משוער לסיום הסבב לפי סבבים קודמים, וגרף של פוסטים מתאימים בכל סבב.</li>
     <li><b>מעדכן בסוף כל סבב:</b> שולח לווצאפ "סיימתי את הסבב בשעה ..." כשהסבב נגמר.</li>
     <li><b>פעם אחת בלבד:</b> פוסט שכבר נשלח אליך לא יישלח שוב.</li>
     <li><b>סריקה חכמה בקבוצות:</b> הקבוצות נסרקות מהחדש לישן. הבוט זוכר את הפוסט האחרון שבדק בכל קבוצה, ובסבב הבא בודק רק מה שנוסף מאז.</li>
@@ -165,6 +179,19 @@
   </div>
 
   <div class="col">
+    <section>
+      <h2>התקדמות</h2>
+      <div class="bar-track" role="progressbar" aria-label="התקדמות הסבב" aria-valuemin="0" id="progressTrack"><div class="bar-fill" id="progressFill"></div></div>
+      <div class="progress-text"><span id="progressText">הסוכן לא בסבב</span><span id="etaText"></span></div>
+      <div class="tiles">
+        <div class="tile"><div class="k">משך סבב ממוצע</div><div class="v" id="tileAvg">–</div></div>
+        <div class="tile"><div class="k">פוסטים מתאימים ב-7 ימים</div><div class="v" id="tileWeek">–</div></div>
+        <div class="tile"><div class="k">פוסטים שנבדקו בסבב האחרון</div><div class="v" id="tilePosts">–</div></div>
+      </div>
+      <div class="chart-title">פוסטים מתאימים בכל סבב</div>
+      <div class="chart" id="chart"><div class="chart-empty">הגרף יופיע אחרי הסבב הראשון</div></div>
+    </section>
+
     <section>
       <h2>טרמינל
         <span class="row"><label class="check"><input type="checkbox" id="follow" checked> גלילה אוטומטית</label>
@@ -230,8 +257,89 @@ function renderDetail() {
     text = `סבב הבא בעוד ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
   }
   $('detail').textContent = text;
+  renderProgress();
 }
 setInterval(renderDetail, 1000);
+
+// ---------- progress & rounds chart ----------
+let rounds = [];
+const mins = (ms) => {
+  const m = Math.max(1, Math.round(ms / 60000));
+  return m < 60 ? `${m} דק'` : `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')} שע'`;
+};
+const clock = (t) => new Date(t).toTimeString().slice(0, 5);
+function renderProgress() {
+  const p = status.state === 'scanning' && status.progress;
+  $('progressFill').style.width = p ? `${Math.round((p.done / p.total) * 100)}%` : '0';
+  $('progressTrack').setAttribute('aria-valuenow', p ? p.done : 0);
+  $('progressTrack').setAttribute('aria-valuemax', p ? p.total : 0);
+  if (p) {
+    $('progressText').innerHTML = `עמוד <b>${p.done + 1}</b> מתוך <b>${p.total}</b>`;
+    $('etaText').innerHTML = status.etaAt
+      ? `סיום משוער: <b>${clock(status.etaAt)}</b> (עוד ${status.etaAt > Date.now() ? '~' + mins(status.etaAt - Date.now()) : 'רגע'})`
+      : 'זמן משוער יחושב אחרי הסבב הראשון';
+  } else {
+    $('progressText').textContent = status.state === 'waiting' ? 'הסבב הסתיים – ממתין לסבב הבא' : 'הסוכן לא בסבב';
+    $('etaText').textContent = '';
+  }
+}
+
+window.addEventListener('resize', () => renderRounds());
+function renderRounds() {
+  const done = rounds.filter((r) => r.duration_ms > 0);
+  const recent = done.slice(-10);
+  $('tileAvg').textContent = recent.length ? mins(recent.reduce((a, r) => a + r.duration_ms, 0) / recent.length) : '–';
+  const weekAgo = Date.now() - 7 * 864e5;
+  $('tileWeek').textContent = done.length ? done.filter((r) => !r.dry_run && Date.parse(r.finished_at) > weekAgo).reduce((a, r) => a + (r.leads || 0), 0) : '–';
+  $('tilePosts').textContent = done.length ? (done[done.length - 1].posts ?? '–') : '–';
+  const box = $('chart');
+  const data = done.slice(-20);
+  if (!data.length) { box.innerHTML = '<div class="chart-empty">הגרף יופיע אחרי הסבב הראשון</div>'; return; }
+  const W = Math.max(280, box.clientWidth || 560), H = 170, padL = 26, padB = 22, padT = 10;
+  const max = Math.max(1, ...data.map((r) => r.leads || 0));
+  const step = max <= 5 ? 1 : max <= 10 ? 2 : Math.ceil(max / 5);
+  const top = Math.ceil(max / step) * step;
+  const y = (v) => padT + (H - padT - padB) * (1 - v / top);
+  const band = (W - padL) / data.length;
+  const bw = Math.min(24, band * 0.6);
+  let svg = '';
+  for (let v = 0; v <= top; v += step) {
+    svg += `<line x1="${padL}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/>`;
+    svg += `<text x="${padL - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${v}</text>`;
+  }
+  // In an RTL page the newest round is drawn on the left (the end of the reading direction).
+  data.forEach((r, i) => {
+    const cx = W - band * (i + 0.5);
+    const v = r.leads || 0;
+    const h = Math.max(0, y(0) - y(v));
+    const x = cx - bw / 2, top0 = y(v), rr = Math.min(4, h);
+    const path = h > 0
+      ? `M${x},${y(0)} V${top0 + rr} Q${x},${top0} ${x + rr},${top0} H${x + bw - rr} Q${x + bw},${top0} ${x + bw},${top0 + rr} V${y(0)} Z`
+      : '';
+    if (path) svg += `<path d="${path}" fill="var(--chart)" ${r.dry_run ? 'fill-opacity=".45"' : ''}/>`;
+    svg += `<rect class="hit" data-i="${i}" x="${cx - band / 2}" y="${padT}" width="${band}" height="${H - padT - padB}" fill="transparent"/>`;
+  });
+  const first = new Date(data[0].finished_at), last = new Date(data[data.length - 1].finished_at);
+  const dm = (d) => `${d.getDate()}/${d.getMonth() + 1}`;
+  svg += `<text x="${W - band / 2}" y="${H - 4}" text-anchor="middle" font-size="11" fill="var(--muted)">${dm(first)}</text>`;
+  if (data.length > 1) svg += `<text x="${W - band * (data.length - 0.5)}" y="${H - 4}" text-anchor="middle" font-size="11" fill="var(--muted)">${dm(last)}</text>`;
+  svg += `<line x1="${padL}" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="var(--muted)" stroke-width="1"/>`;
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="פוסטים מתאימים בכל סבב">${svg}</svg><div class="tip" id="tip"></div>`;
+  const tip = $('tip');
+  box.querySelectorAll('.hit').forEach((el) => {
+    el.addEventListener('mouseenter', () => {
+      const r = data[+el.dataset.i];
+      const d = new Date(r.finished_at);
+      tip.innerHTML = `<b>${r.leads || 0} פוסטים מתאימים</b>${r.dry_run ? ' (בדיקה)' : ''}<br>${dm(d)} ${clock(d)} · ${mins(r.duration_ms)} · ${r.posts ?? 0} פוסטים נבדקו`;
+      const bb = el.getBoundingClientRect(), cb = box.getBoundingClientRect();
+      tip.style.display = 'block';
+      tip.style.right = `${cb.right - bb.left - bb.width / 2}px`;
+      tip.style.top = `${bb.top - cb.top + 6}px`;
+      el.setAttribute('fill', 'var(--grid)'); el.setAttribute('fill-opacity', '.5');
+    });
+    el.addEventListener('mouseleave', () => { tip.style.display = 'none'; el.setAttribute('fill', 'transparent'); });
+  });
+}
 
 $('start').onclick = async () => {
   try { await api('/api/start', { dryRun: $('dry').checked }); } catch (e) { alert(e.message); }
@@ -396,6 +504,7 @@ async function load() {
   groups = s.groups;
   leads = s.leads;
   marks = s.bookmarks;
+  rounds = s.rounds || []; renderRounds();
   fillSettings(s.settings);
   renderMarks();
   renderStatus();
@@ -411,6 +520,7 @@ live.addEventListener('log', (e) => addLog(JSON.parse(e.data)));
 live.addEventListener('status', (e) => { status = JSON.parse(e.data); renderStatus(); });
 live.addEventListener('lead', (e) => { leads = [JSON.parse(e.data), ...leads].slice(0, 30); renderLeads(); });
 live.addEventListener('cleared', () => ($('log').innerHTML = ''));
+live.addEventListener('rounds', () => api('/api/state').then((s) => { rounds = s.rounds || []; renderRounds(); }));
 live.addEventListener('bookmarks', () => api('/api/state').then((s) => { marks = s.bookmarks; renderMarks(); }));
 live.addEventListener('groups', () => api('/api/state').then((s) => { groups = s.groups; renderGroups(); }));
 let connectedOnce = false;

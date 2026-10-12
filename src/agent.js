@@ -18,6 +18,7 @@ const { loadGroupsFile, addGroupsToFile, collectJoinedGroups, groupKey, GroupsLa
 const { forTerminal, setTerminalHebrewFix } = require('./terminal');
 const { log, events, setLogFile } = require('./log');
 const { loadConfig } = require('./configFile');
+const { RoundStats } = require('./rounds');
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
 const OLD_POSTS_TO_STOP = 3;
@@ -106,6 +107,7 @@ function jsPostInfo(el) {
 // ---------- pure helpers ----------
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const pageKey = (source) => source.groupId || 'feed';
 const waTarget = (w) => (w.group_name ? `group:${w.group_name}|${w.group_link || ''}` : `phone:${w.phone || ''}`);
 
 /**
@@ -195,6 +197,9 @@ class DJAgent {
     this.applyConfig(cfg);
     this.storage = new Storage(cfg.history_file);
     this.lastSeen = new GroupsLastSeen(cfg.groups_last_seen_file);
+    this.rounds = new RoundStats(cfg.rounds_file);
+    this.postsThisRound = 0;
+    this.leadsThisRound = 0;
     this.notificationsSent = 0;
     this.sendFailures = 0;
     this.seenThisRun = new Set();
@@ -221,7 +226,9 @@ class DJAgent {
 
   /** What the agent is doing now, for the control panel. */
   setStatus(state, detail = '', extra = {}) {
-    this.status = { ...this.status, state, detail, nextRoundAt: null, ...extra, sent: this.notificationsSent };
+    const base = { ...this.status, state, detail, nextRoundAt: null };
+    if (state !== 'scanning') Object.assign(base, { progress: null, etaAt: null }); // a round's progress, while scanning
+    this.status = { ...base, ...extra, sent: this.notificationsSent };
     events.emit('status', this.status);
   }
 
@@ -310,10 +317,20 @@ class DJAgent {
           await this.wa.setTarget(this.whatsapp);
         }
         const sources = buildSources(this.cfg);
+        const keys = sources.map(pageKey);
         log(`מתחיל סבב: ${sources.length} עמודים לסריקה`);
+        const roundStart = Date.now();
+        const pageMs = {};
+        this.postsThisRound = 0;
+        this.leadsThisRound = 0;
         for (const [i, source] of sources.entries()) {
           if (this.stopRequested) break;
-          this.setStatus('scanning', `${source.label} (${i + 1}/${sources.length})`);
+          const left = this.rounds.remainingMs(keys, i, Object.values(pageMs));
+          this.setStatus('scanning', `${source.label} (${i + 1}/${sources.length})`, {
+            progress: { done: i, total: sources.length },
+            etaAt: left == null ? null : Date.now() + left,
+          });
+          const pageStart = Date.now();
           try {
             await this.scanSource(page, source);
           } catch (e) {
@@ -321,8 +338,23 @@ class DJAgent {
             // One page that fails to load must not stop the whole round.
             log(`   ✘ שגיאה בסריקת ${source.label}, ממשיך לעמוד הבא: ${e.message.split('\n')[0]}`);
           }
+          if (!this.stopRequested) pageMs[keys[i]] = Date.now() - pageStart;
         }
-        if (!this.stopRequested) await this.reportRoundDone(page);
+        if (!this.stopRequested) {
+          this.rounds.add({
+            started_at: new Date(roundStart).toISOString(),
+            finished_at: new Date().toISOString(),
+            duration_ms: Date.now() - roundStart,
+            pages: sources.length,
+            posts: this.postsThisRound,
+            leads: this.leadsThisRound,
+            dry_run: this.dryRun,
+            page_ms: pageMs,
+          });
+          events.emit('rounds');
+          log(`סבב נמשך ${Math.round((Date.now() - roundStart) / 60000)} דקות: ${this.postsThisRound} פוסטים נבדקו, ${this.leadsThisRound} מתאימים`);
+          await this.reportRoundDone(page);
+        }
         const everyMinutes = Number(this.cfg.run_every_minutes || 0);
         if (this.stopRequested || !everyMinutes) break;
         const nextRoundAt = Date.now() + everyMinutes * 60 * 1000;
@@ -515,6 +547,7 @@ class DJAgent {
     if ((await el.count()) === 0) return null;
     const quickText = await el.evaluate((e) => (e.isConnected ? e.innerText : null), null, { timeout: 2000 }).catch(() => null);
     if (!quickText) return null;
+    this.postsThisRound++;
     const maybeDj = this.matcher.mightMatch(quickText);
     if (!maybeDj && !alwaysReadAge) return null;
 
@@ -541,6 +574,7 @@ class DJAgent {
 
     const ageDesc = `${post.ageText} (~${describeAge(age)})`;
     this.printPost(post, matched, ageDesc);
+    this.leadsThisRound++;
 
     if (this.dryRun) {
       log('   [בדיקה] היה נשלח אליך לווצאפ');

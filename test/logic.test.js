@@ -338,3 +338,21 @@ test('whatsapp group: invite link instead of a phone number', () => {
   assert.equal(editableValues(loadConfig(file)).group_link, '');
   assert.throws(() => updateConfigValues(file, { group_link: 'https://example.com/x' }));
 });
+
+test('rounds.json: estimated time left from the pages of previous rounds', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { RoundStats } = require('../src/rounds');
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djrounds-')), 'rounds.json');
+  const r = new RoundStats(file);
+  assert.equal(r.remainingMs(['feed', '111'], 0), null); // no history yet
+  assert.equal(r.remainingMs(['feed', '111'], 1, [60000]), 60000); // pages done this round
+  r.add({ duration_ms: 1, page_ms: { feed: 300000, 111: 60000 } });
+  r.add({ duration_ms: 1, page_ms: { feed: 200000, 111: 40000 } });
+  r.add({ duration_ms: 1, page_ms: { feed: 250000, 111: 50000 } });
+  const again = new RoundStats(file); // read back from disk
+  assert.equal(again.list().length, 3);
+  assert.equal(again.remainingMs(['feed', '111'], 0), 250000 + 50000); // median per page
+  assert.equal(again.remainingMs(['feed', '111', 'new'], 1), 50000 + 130000); // a new group: the typical page (median of all)
+});
