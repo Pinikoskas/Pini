@@ -1,43 +1,90 @@
 // Decide whether a post's text is someone looking for a DJ.
 
 // Spellings of "DJ" people actually write in Hebrew posts.
-// The English forms must be whole words, so "dji" (drones) or "djembe" don't count.
-const DJ_WORD = String.raw`(?:דיי?[\s-]?ג'?\s?(?:יי|אי)|דייג'?יי?(?!ם)|דיג'?(?:יי|אי)|דיגיי|דיג'י|דג'יי|די\.?ג'י|(?<![a-z])(?:d\.?j\.?|dj'?s?)(?![a-z])|תקליטן|תקליטנית|תקליטנים)`;
+// Supports all common variations with/without geresh, spaces, hyphens, and plurals:
+// דיג'יי, דיג'י, די ג'יי, די ג'י, די גי, דיגיי, דיגי, די-ג'י, דייג'י, דייגי, דייג'יים, דייגיים,
+// תקליטן, תקליטנית, תקליטנים, תקליטניות, פעלים (לתקלט, שיתקלט), and English (DJ, DJs, deejay).
+const DJ_WORD = String.raw`(?:` +
+  // די / די- / די עם או בלי גרש: די ג'י, דיג'י, די גי, דיגי, דיג'יי, דיגיי, דיג'יים, דיגיים
+  String.raw`די[\s.-]?ג'?(?:יי|אי|י)(?:[וֹ]?ת|[יִ]?ם)?(?![א-ת])|` +
+  // דיי עם גרש: דייג'י, דייג'יי, דייג'ים, דייג'יים, דיי ג'י, דיי ג'יי...
+  String.raw`דיי[\s.-]?ג'(?:יי|אי|י)(?:[וֹ]?ת|[יִ]?ם)?(?![א-ת])|` +
+  // דיי בלי גרש: דייגי, דייגיי, דייגיים (אך לא "דייג" סתמי ולא "דייגים" בלי הקשר אירוע)
+  String.raw`דיי[\s.-]?ג(?:יי|אי|י(?![םן]))(?:[וֹ]?ת|ם)?(?![א-ת])|` +
+  // דג'י, דג'יי (חובה גרש כדי לא לתפוס דג/דגים)
+  String.raw`דג'(?:יי|אי|י)(?:[וֹ]?ת|[יִ]?ם)?(?![א-ת])|` +
+  // תקליטן / תקליטנים / תקליטנית / תקליטניות
+  String.raw`תקליטן|תקליטנית|תקליטנים|תקליטניות|` +
+  // פעלים של תקלוט
+  String.raw`(?:ל|ש|מ|י|ת)?תקלט(?:ת|ו|ה|ים|ות)?(?![א-ת])|` +
+  String.raw`תקלוט(?![א-ת])|` +
+  // English: dj, djs, d.j., deejay, dee jay
+  String.raw`(?<![a-z])(?:d\.?j\.?s?|dj's|dee[\s-]?jay?s?)(?![a-z])` +
+  `)`;
 
-// Ways of asking for something: "מחפשים", "מי מכיר", "אשמח להמלצה", "כמה עולה"...
-const ASK = String.raw`(?:מחפש|מחפשת|מחפשים|מחפשות|צריך|צריכה|צריכים|צריכות|דרוש|דרושה|דרושים|` +
-  String.raw`מבקש|מבקשת|מבקשים|מעוניין|מעוניינת|מעוניינים|רוצים|אשמח|נשמח|` +
-  String.raw`ממליצים|ממליצות|תמליצו|תמליצי|להמליץ|המלצה|המלצות|מומלץ|מומלצת|מומלצים|` +
-  String.raw`מכירים|מכירות|מי מכיר|מישהו מכיר|מישהי מכירה|יש למישהו|יש למישהי|יש לכם|יש לך|` +
-  String.raw`כמה עולה|כמה עולים|כמה לוקח|כמה גובה|הצעות מחיר|הצעת מחיר|` +
-  String.raw`looking for|need|recommend|anyone know)`;
+// Ways of asking for something: "מחפשים", "מי מכיר", "אשמח להמלצה", "כמה עולה", "חייבים"...
+const ASK = String.raw`(?:` +
+  String.raw`מחפש|מחפשת|מחפשים|מחפשות|מחפש/ת|מחפשים/ות|` +
+  String.raw`צריך|צריכה|צריכים|צריכות|צריך/ה|` +
+  String.raw`חייב|חייבת|חייבים|חייבות|` +
+  String.raw`דרוש|דרושה|דרושים|דרושות|` +
+  String.raw`מבקש|מבקשת|מבקשים|מבקשות|` +
+  String.raw`מעוניין|מעוניינת|מעוניינים|מעוניינות|` +
+  String.raw`רוצה|רוצים|רוצות|` +
+  String.raw`אשמח|נשמח|` +
+  // Not "ממליץ/ממליצה" (I recommend) or a bare "מכיר" (I know one): people offering use them.
+  String.raw`ממליצים|ממליצות|תמליץ|תמליצי|תמליצו|להמליץ|המלצה|המלצות|מומלץ|מומלצת|מומלצים|מומלצות|` +
+  String.raw`מכירים|מכירות|מי\s+מכיר|מישהו\s+מכיר|מישהי\s+מכירה|` +
+  String.raw`מישהו\s+יכול|מישהי\s+יכולה|מי\s+יכול|יכולים\s+להמליץ|` +
+  String.raw`אפשר\s+המלצה|אפשר\s+המלצות|יש\s+המלצה|יש\s+המלצות|` +
+  String.raw`יש\s+למישהו|יש\s+למישהי|יש\s+לכם|יש\s+לך|` +
+  // Not a bare "מחיר/מחירים": every ad has prices ("מחירים מעולים").
+  String.raw`כמה\s+עולה|כמה\s+עולים|כמה\s+לוקח|כמה\s+גובה|` +
+  String.raw`הצעות\s+מחיר|הצעת\s+מחיר|עלויות|טווח\s+מחירים|` +
+  String.raw`looking\s+for|need|needs|needed|recommend|recommendation|recommendations|anyone\s+know|in\s+search\s+of` +
+  `)`;
 
 // Events people hire a DJ for.
-const EVENT = String.raw`(?:חתונה|החתונה|בר מצו|בת מצו|בר-מצו|בת-מצו|אירוע|מסיב|חינה|ברית|יום הולדת|יומולדת|אירוסין|שבת חתן|רווקות|רווקים|פרום|wedding|party|event)`;
+const EVENT = String.raw`(?:חתונה|החתונה|מתחתן|מתחתנ(?:ים|ות|ת)|בר[\s-]?מצו|בת[\s-]?מצו|אירוע|אירועים|מסיב|חינה|ברית|בריתה|יום[\s-]?הולדת|יומולדת|אירוסין|שבת[\s-]?חתן|רווקות|רווקים|פרום|נשף|wedding|party|event)`;
 
 const DEFAULT_INCLUDE = [
-  // "מחפש/ת דיג'יי", "צריכים DJ לחתונה", "מי מכיר די ג'יי טוב?", "כמה עולה תקליטן?"
-  ASK + String.raw`[^\n.!]{0,60}?` + DJ_WORD,
+  // "מחפש/ת דיג'יי", "צריכים DJ לחתונה", "מי מכיר די ג'יי טוב?", "כמה עולה תקליטן?", ורשימות ספקים עם ירידות שורה
+  // The gap may hold line breaks and list bullets, but not the end of a sentence (. ! ?).
+  ASK + String.raw`[^.!?]{0,100}?` + DJ_WORD,
+  // "דיג'יי מומלץ לחתונה", "תקליטן טוב מי מכיר" – in the same sentence
+  DJ_WORD + String.raw`[^\n.!?]{0,40}?` + ASK,
   // "DJ לחתונה / לבר מצווה / לאירוע ... ?"
-  DJ_WORD + String.raw`[^\n.!?]{0,20}?ל-?` + EVENT + String.raw`[^\n]{0,80}\?`,
+  DJ_WORD + String.raw`[\s\S]{0,40}?ל-?` + EVENT + String.raw`[\s\S]{0,80}\?`,
   // "חתונה בספטמבר, דיג'יי טוב באזור?"
-  EVENT + String.raw`[^\n.!?]{0,60}?` + DJ_WORD + String.raw`[^\n.!?]{0,40}\?`,
+  EVENT + String.raw`[\s\S]{0,60}?` + DJ_WORD + String.raw`[\s\S]{0,50}\?`,
+  // "דיג'יי מי פנוי בתאריך...?"
+  DJ_WORD + String.raw`[\s\S]{0,30}?(?:מי\s+)?(?:פנוי|פנויה|פנויים|זמין|זמינה|זמינים)`,
+  // "איזה דיג'יי מומלץ", "מי הדיג'יי"
+  String.raw`(?:איזה|איזו|מי\s+ה|איזה\s+ה)\s*` + DJ_WORD,
+  // טעויות הקלדה נפוצות כמו "מחפשים דייגים לחתונה" (דייגים בהקשר אירוע)
+  ASK + String.raw`[\s\S]{0,30}?דייגים[\s\S]{0,30}?(?:ל-?` + EVENT + `|` + EVENT + `)`
 ];
 
 // "Broad leads": no DJ mentioned, but someone planning an event looks for suppliers, a production,
 // sound or music ("מחפשים ספקים לחתונה", "מחפשת הפקה לבר מצווה"). Sent marked as a broad lead.
 const SUPPLIER = String.raw`(?:ספקים|הפקה|הפקת|הפקות|מפיק|מפיקה|מפיקת|הגברה|מוזיקה|הפעלה|הפעלות)`;
-// The request must be close to what is requested ("מחפשים ספקים", "אשמח להמלצה על הפקה").
-const DEFAULT_BROAD = [ASK + String.raw`[^\n.!?,]{0,15}?` + SUPPLIER];
+const DEFAULT_BROAD = [
+  ASK + String.raw`[\s\S]{0,60}?` + SUPPLIER,
+  SUPPLIER + String.raw`[\s\S]{0,40}?` + ASK
+];
+
 const BROAD_EXCLUDE = [
   // Suppliers advertising themselves: "אני מפיקת אירועים", "אנחנו חברת הפקות"
   String.raw`(?:אני|אנחנו)\s+(?:חברת\s+)?` + SUPPLIER,
-  // Looking for clients: "מחפשת זוגות מאורסים שרוצים...", "מחפשים מפעיל שיעשה לכם"
-  String.raw`(?:מחפש|מחפשת|מחפשים)\s+(?:עבודה|לקוחות|זוגות|כלות|מאורסים|מאורסות|ספקים\s+חדשים\s+ל(?:עסק|חברה))`,
-  // Talking to the reader, the way ads do
-  String.raw`(?:^|\s)(?:לכם|לכן|שלכם|שלכן|בשבילכם|בשבילכן)(?:\s|$|[.,!?])|דברו איתי|דברו איתנו|שברו איתי|נסדר לכם|במחירי|תייגו|הצטרפו|פתחתי|הקבוצות שלי`,
-  // A phone number in the post: suppliers put theirs, people asking rarely do
-  String.raw`0(?:5\d|[2-9])[-\s]?\d{3}[-\s]?\d{4}`,
+  // Looking for customers, not for a supplier: "מחפשת זוגות מאורסים שרוצים לקבל הפקת אירוע"
+  String.raw`(?:מחפש|מחפשת|מחפשים|מחפשות)\s+(?:עבודה|לקוחות|זוגות|כלות|חתנים|משפחות|הורים|ספקים\s+חדשים\s+ל(?:עסק|חברה))`,
+  // Ad language: "רק אצל נאור הפקות", "נסדר לכם", "דברו איתי", "תייגו", "במחירי היכרות"
+  String.raw`רק\s+אצל|(?:ש)?(?:יעשה|תעשה|נעשה|נסדר|נדאג|נפיק|אסדר|אדאג|אעלה|אפיק|נתאים)\s+לכ[םן]|(?:עבורכ|בשבילכ)[םן]`,
+  String.raw`(?:דברו|דברי|שברו|כתבו|פנו|תפנו)\s+(?:איתי|אליי|אלי|איתנו|אלינו)|תייגו|במחירי\s+(?:היכרות|השקה)`,
+  // Promoting a group: "פתחתי מחדש את הקבוצות הסגורות שלי לכלות"
+  String.raw`הקבוצ(?:ה|ות)\s+(?:\S+\s+)?שלי|פתחתי\s+(?:מחדש\s+)?(?:את\s+)?(?:ה)?קבוצ`,
+  // A phone number in the post: almost always a supplier's ad
+  String.raw`(?<!\d)0(?:5\d|[2-489]|7\d)-?\d{3}-?\d{4}(?!\d)`,
 ];
 
 // Posts that mention a DJ but aren't someone looking to hire one.
@@ -45,27 +92,49 @@ const DEFAULT_EXCLUDE = [
   // DJs advertising themselves: "אני דיג'יי", "נעים מאוד, אני תומר, דיג'יי עם...", "לאירוע שלכם"
   String.raw`(?:אני|אנחנו)\s+(?:ה)?` + DJ_WORD,
   String.raw`(?:אני|אנחנו)\s+[^\n.!?]{1,30}?[,\-–]\s*(?:ה)?` + DJ_WORD,
-  String.raw`(?:ל|ב)?(?:אירוע|אירועים|חתונה|מסיבה)\s+שלכם|מתמח(?:ה|ים|ות)\s+ב|אני כאן|לפרטים`,
+  String.raw`(?:שמי|נעים\s+מאוד[,\s]+אני)\s+[^\n.!?]{1,25}?` + DJ_WORD,
+  String.raw`(?:ל|ב)?(?:אירוע|אירועים|חתונה|מסיבה)\s+שלכ[םן]|מתמח(?:ה|ים|ות)\s+ב|אני כאן`,
   String.raw`(?:פנוי|פנויה|פנויים|זמין|זמינה|זמינים)\s+ל(?:אירועים|תאריכים|הזמנות)`,
-  String.raw`תאריכים\s+(?:אחרונים\s+)?(?:פנויים|אחרונים)`,
-  String.raw`להזמנות|לתיאום אירוע|לקבלת הצעת מחיר|צרו (?:איתי |איתנו )?קשר|חייגו|חבילות|מבצע מיוחד`,
+  String.raw`תאריכים\s+(?:אחרונים\s+)?(?:פנויים|אחרונים)|נשארו\s+תאריכים`,
+  String.raw`להזמנות|לתיאום\s+(?:אירוע|פגישה)|לשריון\s+תאריך|סגירת\s+אירועים`,
+  String.raw`חבילות\s+(?:אירוע|ספקים|משתלמות)|מבצע\s+(?:מיוחד|חורף|קיץ)|רק\s+אצל|במחירי\s+(?:היכרות|השקה)|במחיר\s+(?:ללא\s+תחרות|מנצח|מוזל)`,
+  // Ad-specific contact prompts (do NOT exclude legitimate client posts that say "לפרטים בפרטי" or "צרו איתי קשר בפרטי")
+  String.raw`לפרטים\s+(?:והזמנות|נוספים\s+חייגו|בטלפון|בפלאפון|בוואטסאפ\s+חייגו)|לפרטים:\s*0\d`,
+  String.raw`חייגו\s+עכשיו|התקשרו\s+עכשיו|צרו\s+קשר\s+עוד\s+היום`,
+  String.raw`לינק\s+בביו|קישור\s+בביו|סט\s+חדש|מיקס\s+חדש|הרגע\s+עלה|מוזמנים\s+להאזין`,
+  String.raw`תייגו\s+(?:זוגות|חברים|כלות|חתנים)`,
+  String.raw`(?:יעשה|נעשה|נסדר|נדאג|נתאים|ניתן)\s+לכ[םן]\s+(?:בראש|שמח|קרחנה)`,
+
   // DJs looking for work, partners or gigs
-  String.raw`מחפש(?:ת|ים)?\s+(?:עבודה|אירועים|הופעות|לקוחות|שותף|שותפה|להצטרף|משרה|גיגים)`,
+  String.raw`מחפש(?:ת|ים)?\s+(?:עבודה|אירועים|הופעות|לקוחות|שותף|שותפה|להצטרף|משרה|גיגים|לתקלט)`,
+
   // Job ads: "דרושים מלצרים ודיג'יי לחברת אירועים, שכר גבוה"
-  String.raw`(?:דרוש|דרושה|דרושים|דרושות)[^\n]{0,60}(?:לעבודה|למשרה|משמרות|שכר|לצוות|לחברת)`,
+  String.raw`(?:דרוש|דרושה|דרושים|דרושות)[\s\S]{0,60}?(?:לעבודה|למשרה|משמרות|שכר|לצוות|לחברת\s+אירועים)`,
+
   // Students looking for a DJ teacher / course: "מחפש מורה ל-DJ", "שיעורי DJ"
   String.raw`(?:מורה|מורים|שיעור|שיעורי|קורס|קורסים|ללמוד|לימודי)\s*(?:ל-?|ב-?)?\s*` + DJ_WORD,
+
   // Buying / selling equipment: "מחפש לקנות עמדת DJ", "מוכר ציוד DJ"
-  String.raw`(?:לקנות|קונה|למכור|מוכר|מוכרת|עמדת|עמדה|ציוד|קונטרולר|controller|מיקסר)[^\n.!?]{0,15}` + DJ_WORD,
+  String.raw`(?:לקנות|קונה|למכור|מוכר|מוכרת|עמדת|עמדה|ציוד|קונטרולר|controller|מיקסר)[\s\S]{0,20}?` + DJ_WORD,
+  DJ_WORD + String.raw`[\s\S]{0,20}?(?:למכירה|יד\s+2|יד\s+שנייה|במצב\s+מעולה)`,
+
   // Recommending or thanking a DJ after the event: "ממליצה בחום על הדיג'יי", "תודה לדיג'יי"
-  String.raw`(?:ממליץ|ממליצה|ממליצים|ממליצות)\s+בחום|(?:רוצה|רציתי|רוצים|רצינו)\s+(?:להמליץ|לפרגן)|לפרגן\s+ל|תודה(?:\s+רבה)?\s+ל(?:ה)?` + DJ_WORD,
+  String.raw`(?:ממליץ|ממליצה|ממליצים|ממליצות)\s+בחום|(?<!(?:מי|מישהו|מישהי)\s)(?:רוצה|רציתי|רוצים|רצינו)\s+להמליץ|(?:רוצה|רציתי|רוצים|רצינו)\s+לפרגן|לפרגן\s+ל|תודה(?:\s+רבה)?\s+ל(?:ה)?` + DJ_WORD,
+  String.raw`אין\s+על\s+(?:ה)?` + DJ_WORD + String.raw`|הדיג\x27יי\s+שלנו\s+היה`,
+
   // Already have one: "את הדיג'יי כבר סגרנו", "יש לנו דיג'יי, מחפשים צלם"
   String.raw`(?:סגרנו|הזמנו|יש לנו|יש לי)\s+(?:כבר\s+)?(?:את\s+)?(?:ה)?` + DJ_WORD + String.raw`|(?:את\s+)?(?:ה)?` + DJ_WORD + String.raw`\s+(?:כבר\s+)?(?:סגרנו|סגור|הזמנו|יש)`,
+
   // Tips / marketing posts: "איך בוחרים דיג'יי לבת מצווה ולא מתחרטים? בקשו לראות סרטונים, בדקו המלצות..."
-  String.raw`איך\s+(?:בוחרים|לבחור|למצוא|מוצאים)|טיפים|מדריך|לפני\s+(?:ש|שאתם\s+)סוגרים|(?:בקשו|בדקו|ודאו|תוודאו|אל תסתכלו)\s|חוגגים\s+פעם\s+אחת`,
+  String.raw`איך\s+(?:בוחרים|לבחור|למצוא|מוצאים)|טיפים\s+ל|מדריך|לפני\s+(?:ש|שאתם\s+)סוגרים|(?:בקשו|בדקו|ודאו|תוודאו|אל תסתכלו)\s|חוגגים\s+פעם\s+אחת`,
+
   // Looking for a song, not a DJ: "מחפשת את השיר שהדיג'יי שם"
-  String.raw`מחפש(?:ת|ים)?\s+(?:את\s+)?(?:ה)?(?:שיר|רמיקס|סט|פלייליסט)`,
+  String.raw`מחפש(?:ת|ים)?\s+(?:את\s+)?(?:ה)?(?:שיר|רמיקס|סט|טראק|פלייליסט)`,
 ];
+
+// Real fishing ("דייגים" is also a phone's autocorrect of "דיג'יים"). Only checked when "דייגים" is
+// the only DJ-like word, so "חתונה בכנרת, מחפשים דיג'יי" still passes.
+const FISHING = /לדוג|דגים|חכה|חכות|פיתיון|פיתיונות|רשת\s+דייג|סירת\s+דייג|ציוד\s+דייג|סירה|לדיג|דיג\s/;
 
 // A post cut off by "See more" whose visible start hints at a request: read all of it.
 const TRUNCATED = /(?:ראה עוד|ראו עוד|הצג עוד|עוד\.\.\.|see more|…)\s*$/i;
@@ -75,7 +144,9 @@ function normalize(text) {
   return text
     .toLowerCase()
     .replace(/[׳’`´"״]/g, "'")
+    .replace(/'+/g, "'")
     .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '')
+    .replace(/[–—־]/g, '-')
     .replace(/[ \t]+/g, ' ');
 }
 
@@ -87,6 +158,7 @@ class PostMatcher {
     this.broad = compile(DEFAULT_BROAD);
     this.broadExclude = compile(BROAD_EXCLUDE);
     this.event = new RegExp(EVENT, 'i');
+    this.djWord = new RegExp(DJ_WORD, 'i');
   }
 
   /**
@@ -95,7 +167,7 @@ class PostMatcher {
    */
   matchBroad(text) {
     const t = normalize(text);
-    if (new RegExp(DJ_WORD, 'i').test(t) || !this.event.test(t)) return null;
+    if (this.djWord.test(t) || !this.event.test(t)) return null;
     if (this.exclude.some((rx) => rx.test(t)) || this.broadExclude.some((rx) => rx.test(t))) return null;
     for (const rx of this.broad) {
       const m = t.match(rx);
@@ -115,6 +187,7 @@ class PostMatcher {
   match(text) {
     const t = normalize(text);
     if (this.exclude.some((rx) => rx.test(t))) return null;
+    if (FISHING.test(t) && !this.djWord.test(t)) return null;
     for (const rx of this.include) {
       const m = t.match(rx);
       if (m) return m[0];
@@ -128,4 +201,4 @@ function isDjGroupName(name) {
   return new RegExp(DJ_WORD, 'i').test(normalize(String(name || '')));
 }
 
-module.exports = { PostMatcher, DEFAULT_INCLUDE, DEFAULT_EXCLUDE, isDjGroupName };
+module.exports = { PostMatcher, DEFAULT_INCLUDE, DEFAULT_EXCLUDE, DJ_WORD, ASK, EVENT, isDjGroupName };
