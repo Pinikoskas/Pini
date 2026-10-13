@@ -2,7 +2,7 @@
 
 // Spellings of "DJ" people actually write in Hebrew posts.
 // The English forms must be whole words, so "dji" (drones) or "djembe" don't count.
-const DJ_WORD = String.raw`(?:די[\s-]?ג'?\s?(?:יי|אי)|דיג'?(?:יי|אי)|דיגיי|דיג'י|דג'יי|די\.?ג'י|(?<![a-z])(?:d\.?j\.?|dj'?s?)(?![a-z])|תקליטן|תקליטנית|תקליטנים)`;
+const DJ_WORD = String.raw`(?:דיי?[\s-]?ג'?\s?(?:יי|אי)|דייג'?יי?(?!ם)|דיג'?(?:יי|אי)|דיגיי|דיג'י|דג'יי|די\.?ג'י|(?<![a-z])(?:d\.?j\.?|dj'?s?)(?![a-z])|תקליטן|תקליטנית|תקליטנים)`;
 
 // Ways of asking for something: "מחפשים", "מי מכיר", "אשמח להמלצה", "כמה עולה"...
 const ASK = String.raw`(?:מחפש|מחפשת|מחפשים|מחפשות|צריך|צריכה|צריכים|צריכות|דרוש|דרושה|דרושים|` +
@@ -26,12 +26,18 @@ const DEFAULT_INCLUDE = [
 
 // "Broad leads": no DJ mentioned, but someone planning an event looks for suppliers, a production,
 // sound or music ("מחפשים ספקים לחתונה", "מחפשת הפקה לבר מצווה"). Sent marked as a broad lead.
-const SUPPLIER = String.raw`(?:ספקים|ספק|הפקה|הפקת|הפקות|מפיק|מפיקה|מפיקת|הגברה|מוזיקה|הפעלה|הפעלות)`;
-const DEFAULT_BROAD = [ASK + String.raw`[^\n.!]{0,40}?` + SUPPLIER];
+const SUPPLIER = String.raw`(?:ספקים|הפקה|הפקת|הפקות|מפיק|מפיקה|מפיקת|הגברה|מוזיקה|הפעלה|הפעלות)`;
+// The request must be close to what is requested ("מחפשים ספקים", "אשמח להמלצה על הפקה").
+const DEFAULT_BROAD = [ASK + String.raw`[^\n.!?,]{0,15}?` + SUPPLIER];
 const BROAD_EXCLUDE = [
   // Suppliers advertising themselves: "אני מפיקת אירועים", "אנחנו חברת הפקות"
   String.raw`(?:אני|אנחנו)\s+(?:חברת\s+)?` + SUPPLIER,
-  String.raw`(?:מחפש|מחפשת|מחפשים)\s+(?:עבודה|לקוחות|ספקים\s+חדשים\s+ל(?:עסק|חברה))`,
+  // Looking for clients: "מחפשת זוגות מאורסים שרוצים...", "מחפשים מפעיל שיעשה לכם"
+  String.raw`(?:מחפש|מחפשת|מחפשים)\s+(?:עבודה|לקוחות|זוגות|כלות|מאורסים|מאורסות|ספקים\s+חדשים\s+ל(?:עסק|חברה))`,
+  // Talking to the reader, the way ads do
+  String.raw`(?:^|\s)(?:לכם|לכן|שלכם|שלכן|בשבילכם|בשבילכן)(?:\s|$|[.,!?])|דברו איתי|דברו איתנו|שברו איתי|נסדר לכם|במחירי|תייגו|הצטרפו|פתחתי|הקבוצות שלי`,
+  // A phone number in the post: suppliers put theirs, people asking rarely do
+  String.raw`0(?:5\d|[2-9])[-\s]?\d{3}[-\s]?\d{4}`,
 ];
 
 // Posts that mention a DJ but aren't someone looking to hire one.
@@ -117,4 +123,9 @@ class PostMatcher {
   }
 }
 
-module.exports = { PostMatcher, DEFAULT_INCLUDE, DEFAULT_EXCLUDE };
+/** A group about DJs (scanned early in the round): its name has "דיג'יי", "DJ", "תקליטן"... */
+function isDjGroupName(name) {
+  return new RegExp(DJ_WORD, 'i').test(normalize(String(name || '')));
+}
+
+module.exports = { PostMatcher, DEFAULT_INCLUDE, DEFAULT_EXCLUDE, isDjGroupName };

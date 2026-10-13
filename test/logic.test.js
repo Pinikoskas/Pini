@@ -434,3 +434,58 @@ test('config: active hours from the panel are saved as text', () => {
   assert.equal(loadConfig(file).active_until, '00:00');
   assert.throws(() => updateConfigValues(file, { active_from: '25:00' }));
 });
+
+test('review report 13/10: broad leads that were ads are filtered, real ones still pass', () => {
+  const m = new PostMatcher();
+  for (const ad of [
+    'חן עלמה ציפורה לפני כשעה ‏1 שעות · משותף עם: קבוצה ציבורית מחפשת זוגות מאורסים שרוצים לקבל הפקת אירוע (לא ניהול ביום האירוע, הפקה שלמה!) במחירי היכרות באמת מצחיקים תייגו אותם או אם אלו אתם דברו איתי ישירות 0504227099',
+    'היי אשמח להמלצה לספק אלכוהול לקנות ממנו במחיר טוב וגם שתהיה את האופציה להחזיר אליו בקבוקים סגורים בסוף אירוע',
+    'מחפשים מפעיל שיעשה לכם אחלה אירוע רק אצל נאור הפקות שברו איתי נסדר לכם אירוע 0519585993',
+    'לכל הכלות שמתכננות חתונה כרגע - זה בשבילכן פתחתי מחדש את הקבוצות הסגורות שלי לכלות. מקום שבו אפשר לקבל המלצות, ספקים, מציאות, רעיונות',
+  ]) {
+    assert.equal(m.matchBroad(ad), null, ad);
+    assert.equal(m.match(ad), null, ad);
+  }
+  assert.ok(m.matchBroad('היי, אנחנו מתחתנים באוגוסט ומחפשים ספקים לחתונה, המלצות?'));
+  assert.ok(m.matchBroad('מחפשת הפקה לבר מצווה של הבן שלי בדצמבר'));
+  assert.ok(m.match('מחפשת בדחיפות דיג׳אית אישה לאירוע מחר, 13.10, במעלה אדומים'));
+  assert.ok(m.match('מחפשת המלצה לdj מומלץ ולצלם בר מצווה'));
+  assert.ok(m.match('מחפשת דייגי לבת מצווה ברחובות')); // spelling from the report
+  assert.ok(m.match("צריכים דיי ג'יי לחינה"));
+  assert.equal(m.match('מחפש דייגים לשיט בכנרת'), null); // fishermen
+});
+
+test('review report 13/10: the same shared post with a different header is one post', () => {
+  const { cleanPostText, samePost } = require('../src/postText');
+  const a = 'חן עלמה ציפורה לפני כשעה ‏1 שעות · משותף עם: קבוצה ציבורית מחפשת זוגות מאורסים שרוצים לקבל הפקת אירוע (לא ניהול ביום האירוע, הפקה שלמה!) במחירי היכרות באמת מצחיקים תייגו אותם או אם אלו אתם דברו איתי ישירות 0504227099 כתיבת תגובה בתור ‏פִּינִי‏';
+  const b = 'חן עלמה ציפורה לפני 2 שעות ‏2 שעות · משותף עם: קבוצה ציבורית מחפשת זוגות מאורסים שרוצים לקבל הפקת אירוע (לא ניהול ביום האירוע, הפקה שלמה!) במחירי היכרות באמת מצחיקים תייגו אותם או אם אלו אתם דברו איתי ישירות 0504227099 כתיבת תגובה בתור ‏פִּינִי‏';
+  assert.ok(samePost(a, b));
+  assert.ok(cleanPostText(a).startsWith('מחפשת זוגות מאורסים'));
+  assert.ok(!cleanPostText(a).includes('כתיבת תגובה'));
+  assert.ok(!samePost(a, "מחפשים דיג'יי לחתונה באוגוסט באזור המרכז, תשלחו הצעות מחיר בבקשה"));
+  assert.equal(cleanPostText('\uD83C \uDF89 מחפשת בדחיפות'), 'מחפשת בדחיפות'); // broken emoji halves
+});
+
+test('review report 13/10: round order, network errors, bookmark by time', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { orderSources } = require('../src/schedule');
+  const { GroupsLastSeen } = require('../src/groups');
+  const now = Date.now();
+  const sources = [
+    { label: 'feed' },
+    { groupId: 'city', groupName: 'מעלה אדומים ♣' },
+    { groupId: 'dj', groupName: "דיג'יים ישראלים - לכל סוגי האירועים" },
+    { groupId: 'brides', groupName: 'מאורסים 25/26' },
+  ];
+  const leads = [{ action: 'notify', groupId: 'brides', createdAt: new Date(now - 864e5).toISOString() }];
+  assert.deepEqual(orderSources(sources, leads, { now }).map((s) => s.groupId || 'feed'), ['feed', 'brides', 'dj', 'city']);
+
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djseen2-')), 'groups_last_seen.json');
+  const seen = new GroupsLastSeen(file);
+  seen.save('1', 'א', 'p1', now - 3 * 3600e3);
+  assert.equal(new GroupsLastSeen(file).newestPostedAt('1'), now - 3 * 3600e3);
+  seen.save('2', 'ב', 'p2'); // without a time (older bookmarks)
+  assert.equal(new GroupsLastSeen(file).newestPostedAt('2'), null);
+});

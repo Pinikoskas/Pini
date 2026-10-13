@@ -14,7 +14,9 @@ function jsGroupLinks() {
     const m = a.href.match(/facebook\.com\/groups\/([^/?#]+)/);
     if (!m || skip.has(m[1])) continue;
     const name = (a.getAttribute('aria-label') || a.innerText || '').trim().split('\n')[0];
-    if (!found.get(m[1])) found.set(m[1], name);
+    // Links inside notifications ("X סימן לייק...", "הגיבו על פוסט בקבוצה") carry their text, not the group's name.
+    const notice = /סימן לייק|סימנה לייק|הגיבו על|הגיב על|הגיבה על|תייג|תויג|שיתף|שיתפה|reacted|commented|liked|tagged|shared/i.test(name);
+    if (!found.has(m[1]) || (!found.get(m[1]) && !notice)) found.set(m[1], notice ? '' : name);
   }
   return [...found].map(([id, name]) => ({ id, name }));
 }
@@ -26,6 +28,10 @@ function jsGroupLinks() {
 function cleanGroupName(name) {
   let n = String(name || '').replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, ' ');
   n = n.replace(/^\s*(?:לא נקראו|לא נקרא|unread)\s*/i, '');
+  // A notification's text instead of a name ("X סימן לייק ב תשובה...", "... הגיבו על פוסט בקבוצה Y"):
+  const reacted = n.match(/(?:הגיבו|הגיב|הגיבה)\s+על\s+(?:פוסט|תגובה)\s+בקבוצה\s+(.+?)(?:[.:·]|\s+\d+\s|$)/);
+  if (reacted) n = reacted[1];
+  else if (/סימן לייק|סימנה לייק|הגיבו על|הגיב על|הגיבה על|תויגת|תייג אותך|רגש אחד|reacted|commented/i.test(n)) return '';
   const inGroup = n.match(/^\s*בקבוצה\s+(.+?)\s+יש\s+(?:\d+\s+)?(?:פוסט|פוסטים)\s+חדש/);
   if (inGroup) n = inGroup[1];
   n = n.replace(/\s*:\s*["“].*$/s, ''); // ': "title of the newest post"...'
@@ -114,10 +120,21 @@ class GroupsLastSeen {
     return (this.data[groupId] && this.data[groupId].newest_post) || null;
   }
 
+  /** When the newest post seen last scan was posted (ms), or null for older bookmarks. */
+  newestPostedAt(groupId) {
+    const t = this.data[groupId] && Date.parse(this.data[groupId].newest_posted_at);
+    return Number.isFinite(t) ? t : null;
+  }
+
   // Re-reads the file first, so a bookmark deleted from the control panel isn't written back.
-  save(groupId, name, postKey) {
+  save(groupId, name, postKey, postedAt = null) {
     this.reload();
-    this.data[groupId] = { name: name || '', newest_post: postKey, checked_at: new Date().toISOString() };
+    this.data[groupId] = {
+      name: name || '',
+      newest_post: postKey,
+      ...(postedAt ? { newest_posted_at: new Date(postedAt).toISOString() } : {}),
+      checked_at: new Date().toISOString(),
+    };
     this.write();
   }
 

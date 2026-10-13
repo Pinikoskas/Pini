@@ -1,5 +1,7 @@
 // When the agent works: active hours (e.g. 08:00–00:00), and which groups to scan this round.
 
+const { isDjGroupName } = require('./matcher');
+
 const DAY = 24 * 60 * 60 * 1000;
 
 /** "08:00" -> minutes since midnight (480). "00:00" as an end time means midnight (1440). */
@@ -34,7 +36,8 @@ function nextActiveTime(cfg, date = new Date()) {
 }
 
 /**
- * Groups that brought a matching post in the last `strongDays` days are scanned every round.
+ * Groups that brought a matching post in the last `strongDays` days, and groups about DJs, are
+ * scanned every round.
  * Other groups every `weakEvery` rounds: only when their last scan is older than that many
  * round intervals (a group never scanned is always scanned).
  */
@@ -44,9 +47,25 @@ function isDueThisRound(source, { leads, lastCheckedAt, everyMinutes, now = Date
   const strong = leads.some(
     (a) => Date.parse(a.createdAt) > since && (a.groupId === source.groupId || String(a.postKey).includes(`/groups/${source.groupId}/`)),
   );
-  if (strong || !lastCheckedAt || !everyMinutes) return true;
+  if (strong || isDjGroupName(source.groupName) || !lastCheckedAt || !everyMinutes) return true;
   // A little slack so a round that started slightly early doesn't skip the group again.
   return now - Date.parse(lastCheckedAt) >= (weakEvery - 0.5) * everyMinutes * 60 * 1000;
 }
 
-module.exports = { parseClock, inActiveHours, nextActiveTime, isDueThisRound };
+/**
+ * The order of a round: the feed, then groups that brought matching posts in the last 30 days
+ * (most first), then groups about DJs, then the rest as in groups.txt. So the most useful pages
+ * are scanned first, even when the round runs long.
+ */
+function orderSources(sources, leads, { now = Date.now(), strongDays = 30 } = {}) {
+  const since = now - strongDays * DAY;
+  const count = (s) =>
+    leads.filter((a) => Date.parse(a.createdAt) > since && (a.groupId === s.groupId || String(a.postKey).includes(`/groups/${s.groupId}/`))).length;
+  const rank = (s) => (!s.groupId ? [0, 0] : count(s) ? [1, -count(s)] : isDjGroupName(s.groupName) ? [2, 0] : [3, 0]);
+  return sources
+    .map((s, i) => ({ s, i, r: rank(s) }))
+    .sort((a, b) => a.r[0] - b.r[0] || a.r[1] - b.r[1] || a.i - b.i)
+    .map((x) => x.s);
+}
+
+module.exports = { parseClock, inActiveHours, nextActiveTime, isDueThisRound, orderSources };

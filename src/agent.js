@@ -15,11 +15,12 @@ const { Storage } = require('./storage');
 const { formatPostMessage, checkWhatsAppSettings } = require('./whatsapp');
 const { WhatsAppWeb } = require('./whatsappWeb');
 const { loadGroupsFile, addGroupsToFile, collectJoinedGroups, groupKey, GroupsLastSeen } = require('./groups');
-const { forTerminal, setTerminalHebrewFix } = require('./terminal');
+const { setTerminalHebrewFix } = require('./terminal');
 const { log, events, setLogFile } = require('./log');
 const { loadConfig } = require('./configFile');
 const { RoundStats } = require('./rounds');
-const { inActiveHours, nextActiveTime, isDueThisRound } = require('./schedule');
+const { cleanPostText } = require('./postText');
+const { inActiveHours, nextActiveTime, isDueThisRound, orderSources } = require('./schedule');
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
 const OLD_POSTS_TO_STOP = 3;
@@ -109,6 +110,11 @@ function jsPostInfo(el) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const pageKey = (source) => source.groupId || 'feed';
+const NO_INTERNET_GIVE_UP_MIN = 30;
+const isNetworkError = (e) =>
+  /ERR_(?:INTERNET_DISCONNECTED|CONNECTION_\w+|NETWORK_\w+|NAME_NOT_RESOLVED|ADDRESS_UNREACHABLE|TIMED_OUT|QUIC_PROTOCOL_ERROR|PROXY_CONNECTION_FAILED)|page\.goto: Timeout/.test(
+    String(e && e.message),
+  );
 const clock = (t) => new Date(t).toTimeString().slice(0, 5);
 const activeHoursText = (cfg) => `${cfg.active_from || '08:00'}–${cfg.active_until || '00:00'}`;
 const waTarget = (w) => (w.group_name ? `group:${w.group_name}|${w.group_link || ''}` : `phone:${w.phone || ''}`);
@@ -330,13 +336,18 @@ class DJAgent {
         const everyMinutesNow = Number(this.cfg.run_every_minutes || 0);
         const leads = this.storage.actions.filter((a) => a.action === 'notify');
         const all = buildSources(this.cfg);
-        const sources = all.filter((s) =>
-          isDueThisRound(s, { leads, lastCheckedAt: s.groupId && this.lastSeen.checkedAt(s.groupId), everyMinutes: everyMinutesNow }),
+        const sources = orderSources(
+          all.filter((s) =>
+            isDueThisRound(s, { leads, lastCheckedAt: s.groupId && this.lastSeen.checkedAt(s.groupId), everyMinutes: everyMinutesNow }),
+          ),
+          leads,
         );
         const keys = sources.map(pageKey);
         const skipped = all.length - sources.length;
         log(`מתחיל סבב: ${sources.length} עמודים לסריקה` + (skipped ? ` (${skipped} קבוצות בלי פוסטים מתאימים ב-30 יום נסרקות כל סבב שלישי – לא בסבב הזה)` : ''));
         const usualMs = this.rounds.typicalRoundMs();
+        let failedPages = 0;
+        let offline = false;
         let slowAlertSent = false;
         const roundStart = Date.now();
         const pageMs = {};
@@ -358,17 +369,36 @@ class DJAgent {
             progress: { done: i, total: sources.length },
             etaAt: left == null ? null : Date.now() + left,
           });
-          const pageStart = Date.now();
-          try {
-            await this.scanSource(page, source);
-          } catch (e) {
-            if (browserClosed || page.isClosed()) throw e;
-            // One page that fails to load must not stop the whole round.
-            log(`   ✘ שגיאה בסריקת ${source.label}, ממשיך לעמוד הבא: ${e.message.split('\n')[0]}`);
+          let pageStart = Date.now();
+          let ok = false;
+          for (let attempt = 0; attempt < 2 && !ok && !this.stopRequested; attempt++) {
+            try {
+              await this.scanSource(page, source);
+              ok = true;
+            } catch (e) {
+              if (browserClosed || page.isClosed()) throw e;
+              if (isNetworkError(e) && attempt === 0) {
+                // No internet: wait for it to come back, then scan the same page again.
+                if (!(await this.waitForInternet(page))) {
+                  offline = true;
+                  break;
+                }
+                pageStart = Date.now();
+                continue;
+              }
+              // One page that fails to load must not stop the whole round.
+              log(`   ✘ שגיאה בסריקת ${source.label}, ממשיך לעמוד הבא: ${e.message.split('\n')[0]}`);
+              failedPages++;
+              break;
+            }
           }
-          if (!this.stopRequested) pageMs[keys[i]] = Date.now() - pageStart;
+          if (offline) break;
+          if (ok && !this.stopRequested) pageMs[keys[i]] = Date.now() - pageStart;
         }
-        if (!this.stopRequested) {
+        this.failedPagesNote = failedPages ? ` (${failedPages} עמודים נכשלו)` : '';
+        if (offline) {
+          log(`✘ הסבב הופסק: אין חיבור לאינטרנט כבר ${NO_INTERNET_GIVE_UP_MIN} דקות. ינסה שוב בסבב הבא`);
+        } else if (!this.stopRequested) {
           this.rounds.add({
             started_at: new Date(roundStart).toISOString(),
             finished_at: new Date().toISOString(),
@@ -411,11 +441,34 @@ class DJAgent {
   async reportRoundDone(page) {
     if (this.dryRun || !this.notify) return;
     try {
-      await this.notify(`סיימתי את הסבב בשעה ${new Date().toTimeString().slice(0, 5)}`);
+      await this.notify(`סיימתי את הסבב בשעה ${new Date().toTimeString().slice(0, 5)}${this.failedPagesNote || ''}`);
+      log('   ✔ הודעת סיום הסבב נשלחה לווצאפ');
     } catch (e) {
       log(`   ✘ הודעת סיום הסבב לא נשלחה: ${e.message.split('\n')[0]}`);
     }
     await page.bringToFront().catch(() => {});
+  }
+
+  /**
+   * Waits for the internet to come back (checks every minute). False if it didn't within
+   * NO_INTERNET_GIVE_UP_MIN minutes. WhatsApp can't be reached without internet either, so the
+   * alert is only in the log.
+   */
+  async waitForInternet(page) {
+    log(`📶 אין חיבור לאינטרנט – ממתין שיחזור (בודק כל דקה, עד ${NO_INTERNET_GIVE_UP_MIN} דקות)`);
+    this.setStatus('scanning', 'אין חיבור לאינטרנט – ממתין שיחזור', { progress: this.status.progress, etaAt: null });
+    const deadline = Date.now() + NO_INTERNET_GIVE_UP_MIN * 60 * 1000;
+    while (Date.now() < deadline && !this.stopRequested) {
+      await this.waitOrStop(60 * 1000);
+      try {
+        await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+        log('📶 החיבור חזר ✔ – ממשיך מאותו עמוד');
+        return true;
+      } catch (e) {
+        if (!isNetworkError(e)) return true; // some other problem: let the page try (and report it)
+      }
+    }
+    return false;
   }
 
   async isLoginPage(page) {
@@ -479,7 +532,7 @@ class DJAgent {
     // Remember the newest post of the group for next time – unless this is a test run or a
     // WhatsApp send failed here (then the next scan must reach that post again).
     if (source.groupId && newest && !this.dryRun && !this.stopRequested && this.sendFailures === failuresBefore) {
-      this.lastSeen.save(source.groupId, source.groupName, newest.key);
+      this.lastSeen.save(source.groupId, source.groupName, newest.key, Date.now() - newest.age);
       events.emit('bookmarks');
     }
   }
@@ -495,13 +548,17 @@ class DJAgent {
       const slack = ages[i - 1] < DAY ? HOUR : DAY;
       if (ages[i] < ages[i - 1] - slack) outOfOrder++;
     }
-    if (outOfOrder <= 1) log(`   ✔ הקבוצה מסודרת מהחדש לישן (${ages.length} פוסטים נבדקו)`);
+    if (outOfOrder <= 1) log(`   ✔ הקבוצה מסודרת מהחדש לישן (לפי ${ages.length} פוסטים עם תאריך)`);
     else log(`   ⚠ הקבוצה לא מסודרת לפי זמן: ${outOfOrder} מתוך ${ages.length} פוסטים יצאו מהסדר`);
   }
 
   /** Scrolls one page and checks its posts. Returns { newest: { age, key } | null, ages }. */
   async scrollAndCheck(page, { maxScrolls, untilOld, groupId }) {
     const lastSeenKey = groupId ? this.lastSeen.newestPost(groupId) : null;
+    // Also stop by time: posts older than last scan's newest post were checked then, even if that
+    // post itself is gone (deleted, or Facebook changed its link). An hour of slack for rounded ages.
+    const lastSeenAt = groupId ? this.lastSeen.newestPostedAt(groupId) : null;
+    let seenInARow = 0;
     const ages = [];
     let newest = null;
     let totalPosts = 0;
@@ -530,6 +587,13 @@ class DJAgent {
           return { newest, ages };
         }
         if (res.age === null) continue;
+        if (lastSeenAt) {
+          seenInARow = Date.now() - res.age < lastSeenAt - HOUR ? seenInARow + 1 : 0;
+          if (seenInARow >= OLD_POSTS_TO_STOP) {
+            log(`   הגענו לפוסטים שכבר נבדקו בסריקה הקודמת (לפי הזמן) – עוצר את הקבוצה (${totalPosts} פוסטים)`);
+            return { newest, ages };
+          }
+        }
         oldInARow = res.age > this.maxAgeMs ? oldInARow + 1 : 0;
         // A single older post can slip in between new ones, so wait for a few in a row.
         if (oldInARow >= OLD_POSTS_TO_STOP) {
@@ -544,6 +608,7 @@ class DJAgent {
       await page.mouse.wheel(0, randInt(700, 1300));
       await humanSleep(this.cfg.delay_between_scrolls || [3, 7]);
     }
+    if (untilOld && !this.stopRequested) log(`   הגענו למקסימום ${maxScrolls} גלילות – עוצר את הקבוצה (${totalPosts} פוסטים)`);
     return { newest, ages };
   }
 
@@ -551,7 +616,7 @@ class DJAgent {
     await el.evaluate(jsExpandSeeMore);
     await sleep(500);
     const info = await el.evaluate(jsPostInfo);
-    const text = (info.body || info.full).trim();
+    const text = cleanPostText(info.body || info.full);
 
     let ageText = '';
     for (let i = 0; i < info.stamps.length && !ageText; i++) {
@@ -578,7 +643,8 @@ class DJAgent {
       url,
       text,
       authorName: info.authorName,
-      groupName: info.groupName,
+      // Inside a group the post itself doesn't link the group: use the group being scanned.
+      groupName: info.groupName || (this.currentSource && this.currentSource.groupName) || '',
       authorUrl: canonicalProfileUrl(info.authorHref),
       ageText,
     };
@@ -668,16 +734,13 @@ class DJAgent {
     return { age, key: post.key };
   }
 
+  /** The post that was found, in the terminal and in dj_agent.log (for checking afterwards). */
   printPost(post, matched, ageDesc) {
     const preview = post.text.replace(/\s+/g, ' ').slice(0, 250);
-    const bar = '='.repeat(70);
-    const lines = [
-      `${post.broad ? '🔎 ליד רחב' : '🎯 נמצא פוסט מתאים'}  |  ${post.authorName || '?'}${post.groupName ? `  |  ${post.groupName}` : ''}  |  עלה: ${ageDesc}`,
-      `   ביטוי שזוהה: «${matched}»`,
-      `   ${preview}`,
-    ];
-    if (post.url) lines.push(`   ${post.url}`);
-    console.log(`\n${bar}\n${forTerminal(lines.join('\n'))}\n${bar}`);
+    log(`${post.broad ? '🔎 ליד רחב' : '🎯 נמצא פוסט מתאים'}  |  ${post.authorName || '?'}${post.groupName ? `  |  ${post.groupName}` : ''}  |  עלה: ${ageDesc}`);
+    log(`   ביטוי שזוהה: «${matched}»`);
+    log(`   ${preview}`);
+    if (post.url) log(`   ${post.url}`);
   }
 }
 

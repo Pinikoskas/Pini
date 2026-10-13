@@ -5,13 +5,7 @@
 
 const fs = require('fs');
 
-// The start of a post's text, ignoring spacing, punctuation and "See more / See less".
-const sameText = (t) =>
-  String(t || '')
-    .replace(/(?:ראה עוד|ראו עוד|הצג עוד|פחות|see more|see less)\s*$/i, '')
-    .replace(/[^\p{L}\p{N}]+/gu, '')
-    .toLowerCase()
-    .slice(0, 300);
+const { samePost, fixBrokenChars } = require('./postText');
 
 class Storage {
   constructor(path) {
@@ -41,8 +35,7 @@ class Storage {
 
   /** True when a post with the same text was already sent (the same ad posted in many groups). */
   textHandled(text) {
-    const t = sameText(text);
-    return t.length >= 40 && this.actions.some((a) => sameText(a.postText) === t);
+    return this.actions.some((a) => a.action === 'notify' && samePost(a.postText, text));
   }
 
   record(postKey, authorUrl, action, postText = '', { authorName = '', groupName = '', groupId = null, broad = false } = {}) {
@@ -56,7 +49,7 @@ class Storage {
       ...(broad ? { broad: true } : {}),
       action,
       createdAt: new Date().toISOString(),
-      postText: postText.slice(0, 500),
+      postText: Array.from(fixBrokenChars(postText)).slice(0, 500).join(''), // whole characters, no broken emoji
     });
     this.save();
   }
