@@ -215,6 +215,13 @@
     </section>
 
     <section>
+      <h2>קובץ החלטות לסקירה <button class="small" id="resetDecisions">🗑 אפס אחרי ששלחת</button></h2>
+      <p class="hint">כל פוסט שנשלח, פוסט שהבוט רצה לשלוח ודילג (ישן, בלי זמן, טקסט כפול), פוסט שנפסל, ופוסט שמזכיר דיג'יי או מוזיקה ולא זוהה כבקשה. שולחים את הקובץ לסקירה פעם ביומיים, ואחר כך מאפסים.</p>
+      <div class="progress-text"><span id="decisionsInfo">–</span></div>
+      <div class="hint" dir="ltr" style="text-align:right;margin-top:4px" id="decisionsFile"></div>
+    </section>
+
+    <section>
       <h2>הפוסט האחרון שנשמר בכל קבוצה <button class="small" id="clearMarks">🗑 מחק הכל</button></h2>
       <p class="hint">מכאן הבוט ממשיך בכל קבוצה: בסבב הבא הוא עוצר כשהוא מגיע לפוסט הזה. מחיקה = הקבוצה תיסרק שוב מההתחלה (עד "כמה ימים אחורה").</p>
       <div class="marks" id="marks"></div>
@@ -270,6 +277,22 @@ function renderDetail() {
   renderProgress();
 }
 setInterval(renderDetail, 1000);
+
+// ---------- decisions file ----------
+let decisions = null;
+function renderDecisions() {
+  if (!decisions) return;
+  const kb = Math.max(1, Math.round(decisions.bytes / 1024));
+  $('decisionsInfo').innerHTML = decisions.count
+    ? `<b>${decisions.count}</b> רשומות (${kb > 1024 ? (kb / 1024).toFixed(1) + ' MB' : kb + ' KB'}), הראשונה: ${esc(timeAgo(decisions.since))}`
+    : 'ריק – יתמלא בסבב הבא';
+  $('decisionsFile').textContent = decisions.file || '';
+}
+$('resetDecisions').onclick = async () => {
+  if (!confirm('לאפס את קובץ ההחלטות? (אחרי ששלחת אותו לסקירה)')) return;
+  ({ decisions } = await api('/api/decisions/reset', {}));
+  renderDecisions();
+};
 
 // ---------- progress & rounds chart ----------
 let rounds = [];
@@ -515,6 +538,7 @@ async function load() {
   leads = s.leads;
   marks = s.bookmarks;
   rounds = s.rounds || []; renderRounds();
+  decisions = s.decisions; renderDecisions();
   fillSettings(s.settings);
   renderMarks();
   renderStatus();
@@ -530,7 +554,7 @@ live.addEventListener('log', (e) => addLog(JSON.parse(e.data)));
 live.addEventListener('status', (e) => { status = JSON.parse(e.data); renderStatus(); });
 live.addEventListener('lead', (e) => { leads = [JSON.parse(e.data), ...leads].slice(0, 30); renderLeads(); });
 live.addEventListener('cleared', () => ($('log').innerHTML = ''));
-live.addEventListener('rounds', () => api('/api/state').then((s) => { rounds = s.rounds || []; renderRounds(); }));
+live.addEventListener('rounds', () => api('/api/state').then((s) => { rounds = s.rounds || []; renderRounds(); decisions = s.decisions; renderDecisions(); }));
 live.addEventListener('bookmarks', () => api('/api/state').then((s) => { marks = s.bookmarks; renderMarks(); }));
 live.addEventListener('groups', () => api('/api/state').then((s) => { groups = s.groups; renderGroups(); }));
 let connectedOnce = false;

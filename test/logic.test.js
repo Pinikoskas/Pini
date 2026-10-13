@@ -504,6 +504,7 @@ test("matcher (user's version, 13/10): more spellings and phrasings, ads still f
     "מחפשת דיג'יי, צרו איתי קשר בפרטי",
     "חייבים דיג'יי לאירוע ביום שישי",
     'מי יכול לתקלט באירוע שלנו בשבת?',
+    'מי עושה דיגיי טוב באזור הצפון', // found through the decisions file
     "חתונה בכנרת בספטמבר, מחפשים דיג'יי",
   ]) {
     assert.ok(m.match(text), text);
@@ -520,4 +521,28 @@ test("matcher (user's version, 13/10): more spellings and phrasings, ads still f
   ]) {
     assert.equal(m.match(text), null, text);
   }
+});
+
+test('decisions file: every decision with its reason, each post once, reset from the panel', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { DecisionLog } = require('../src/decisions');
+  const m = new PostMatcher();
+  assert.deepEqual(m.classify("מחפשים דיג'יי לחתונה"), { kind: 'dj', phrase: "מחפשים דיג'יי" });
+  assert.equal(m.classify("רוצה להמליץ בחום על הדיג'יי שלנו").kind, 'excluded');
+  assert.equal(m.classify('מחפשים ספקים לחתונה').kind, 'broad');
+  assert.deepEqual(m.classify("הדיג'יי היה מעולה"), { kind: 'none', candidate: true });
+  assert.deepEqual(m.classify('מתכון לעוגת שוקולד'), { kind: 'none', candidate: false });
+
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djdec-')), 'decisions.jsonl');
+  const d = new DecisionLog(file);
+  d.add({ decision: 'sent', url: 'u1', text: 'a' });
+  d.add({ decision: 'sent', url: 'u1', text: 'a' }); // the same post next round: not again
+  d.add({ decision: 'excluded', url: 'u2', by: 'לפרטים', text: 'b' });
+  assert.equal(new DecisionLog(file).summary().count, 2);
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8').split('\n')[1]).by, 'לפרטים');
+  new DecisionLog(file).reset(); // the panel's button, while the agent keeps its own copy
+  d.add({ decision: 'sent', url: 'u1', text: 'a' }); // written again after the reset
+  assert.equal(new DecisionLog(file).summary().count, 1);
 });

@@ -12,6 +12,7 @@ const { readAllGroups, setGroupsEnabled, GroupsLastSeen } = require('./groups');
 const { checkWhatsAppSettings } = require('./whatsapp');
 const { Storage } = require('./storage');
 const { RoundStats } = require('./rounds');
+const { DecisionLog } = require('./decisions');
 const { log, events, recentLogs, clearRecent } = require('./log');
 
 const PAGE = path.join(__dirname, 'panel.html');
@@ -38,6 +39,7 @@ function startPanel({ configPath, port }) {
       leads: new Storage(cfg.history_file).recentLeads(30),
       bookmarks: bookmarks(cfg),
       rounds: new RoundStats(cfg.rounds_file).list(30),
+      decisions: { ...new DecisionLog(cfg.decisions_file).summary(), file: cfg.decisions_file },
       logs: recentLogs(),
     };
   }
@@ -96,6 +98,13 @@ function startPanel({ configPath, port }) {
       const n = new GroupsLastSeen(cfg.groups_last_seen_file).remove({ ids: ids || [], all: !!all });
       log(`🗑 נמחקו ${n} סימונים של פוסט אחרון – הקבוצות האלה ייסרקו מההתחלה${later()}`);
       return { ok: true, bookmarks: bookmarks(cfg) };
+    },
+
+    'POST /api/decisions/reset': () => {
+      const cfg = loadConfig(configPath);
+      new DecisionLog(cfg.decisions_file).reset();
+      log('🗑 קובץ ההחלטות אופס – מתחיל לאסוף מחדש');
+      return { ok: true, decisions: { ...new DecisionLog(cfg.decisions_file).summary(), file: cfg.decisions_file } };
     },
 
     'POST /api/leads/delete': ({ postKeys, all }) => {

@@ -35,7 +35,7 @@ const ASK = String.raw`(?:` +
   // Not "ממליץ/ממליצה" (I recommend) or a bare "מכיר" (I know one): people offering use them.
   String.raw`ממליצים|ממליצות|תמליץ|תמליצי|תמליצו|להמליץ|המלצה|המלצות|מומלץ|מומלצת|מומלצים|מומלצות|` +
   String.raw`מכירים|מכירות|מי\s+מכיר|מישהו\s+מכיר|מישהי\s+מכירה|` +
-  String.raw`מישהו\s+יכול|מישהי\s+יכולה|מי\s+יכול|יכולים\s+להמליץ|` +
+  String.raw`מישהו\s+יכול|מישהי\s+יכולה|מי\s+יכול|יכולים\s+להמליץ|מי\s+עושה|מישהו\s+עושה|מישהי\s+עושה|` +
   String.raw`אפשר\s+המלצה|אפשר\s+המלצות|יש\s+המלצה|יש\s+המלצות|` +
   String.raw`יש\s+למישהו|יש\s+למישהי|יש\s+לכם|יש\s+לך|` +
   // Not a bare "מחיר/מחירים": every ad has prices ("מחירים מעולים").
@@ -136,6 +136,10 @@ const DEFAULT_EXCLUDE = [
 // the only DJ-like word, so "חתונה בכנרת, מחפשים דיג'יי" still passes.
 const FISHING = /לדוג|דגים|חכה|חכות|פיתיון|פיתיונות|רשת\s+דייג|סירת\s+דייג|ציוד\s+דייג|סירה|לדיג|דיג\s/;
 
+// Worth a look even when it isn't recognized as a request: any DJ-like word, even misspelled, or
+// music / sound. These go to the decisions file, to find requests the patterns miss.
+const CANDIDATE = new RegExp(DJ_WORD + String.raw`|דיג|דייג|די\s?ג|דג'|ג'יי|תקליט|תקלט|deejay|\bdj|מוזיקה|מוסיקה|הגברה|רמקול|פלייליסט`, 'i');
+
 // A post cut off by "See more" whose visible start hints at a request: read all of it.
 const TRUNCATED = /(?:ראה עוד|ראו עוד|הצג עוד|עוד\.\.\.|see more|…)\s*$/i;
 const REQUEST_HINT = new RegExp(ASK + '|' + EVENT, 'i');
@@ -176,11 +180,48 @@ class PostMatcher {
     return null;
   }
 
+  /** Mentions a DJ (even misspelled) or music / sound: recorded in the decisions file. */
+  isCandidate(text) {
+    return CANDIDATE.test(normalize(text));
+  }
+
   /** Cheap pre-check (ignores exclusions) used before reading the post in detail. */
   mightMatch(text) {
     const t = normalize(text);
     if (this.include.some((rx) => rx.test(t)) || this.broad.some((rx) => rx.test(t))) return true;
     return TRUNCATED.test(t.trim()) && REQUEST_HINT.test(t);
+  }
+
+  /**
+   * The full decision, with the reason, for the decisions file:
+   *   { kind: 'dj' | 'broad', phrase }            – a request (to send)
+   *   { kind: 'excluded', phrase, by }            – looked like a request, ruled out by `by`
+   *   { kind: 'none', candidate: true|false }     – not a request; candidate = mentions DJ / music
+   */
+  classify(text) {
+    const t = normalize(text);
+    const first = (list) => {
+      for (const rx of list) {
+        const m = t.match(rx);
+        if (m) return m[0];
+      }
+      return null;
+    };
+    const dj = first(this.include);
+    const excludedBy = first(this.exclude);
+    if (dj) {
+      if (excludedBy) return { kind: 'excluded', phrase: dj, by: excludedBy };
+      if (FISHING.test(t) && !this.djWord.test(t)) return { kind: 'excluded', phrase: dj, by: (t.match(FISHING) || [''])[0] };
+      return { kind: 'dj', phrase: dj };
+    }
+    if (!this.djWord.test(t) && this.event.test(t)) {
+      const broad = first(this.broad);
+      if (broad) {
+        const by = excludedBy || first(this.broadExclude);
+        return by ? { kind: 'excluded', phrase: broad, by, broad: true } : { kind: 'broad', phrase: broad };
+      }
+    }
+    return { kind: 'none', candidate: CANDIDATE.test(t) };
   }
 
   /** Returns the matched phrase, or null if the post isn't a DJ request. */

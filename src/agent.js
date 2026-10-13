@@ -20,6 +20,7 @@ const { log, events, setLogFile } = require('./log');
 const { loadConfig } = require('./configFile');
 const { RoundStats } = require('./rounds');
 const { cleanPostText } = require('./postText');
+const { DecisionLog } = require('./decisions');
 const { inActiveHours, nextActiveTime, isDueThisRound, orderSources } = require('./schedule');
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
@@ -207,6 +208,7 @@ class DJAgent {
     this.storage = new Storage(cfg.history_file);
     this.lastSeen = new GroupsLastSeen(cfg.groups_last_seen_file);
     this.rounds = new RoundStats(cfg.rounds_file);
+    this.decisions = new DecisionLog(cfg.decisions_file);
     this.postsThisRound = 0;
     this.leadsThisRound = 0;
     this.notificationsSent = 0;
@@ -675,26 +677,36 @@ class DJAgent {
     const quickText = await el.evaluate((e) => (e.isConnected ? e.innerText : null), null, { timeout: 2000 }).catch(() => null);
     if (!quickText) return null;
     this.postsThisRound++;
-    const maybeDj = this.matcher.mightMatch(quickText);
+    const maybeDj = this.matcher.mightMatch(quickText) || this.matcher.isCandidate(quickText);
     if (!maybeDj && !alwaysReadAge) return null;
 
     const post = await this.readPost(page, el);
     const age = parsePostAge(post.ageText);
-    let matched = maybeDj && this.matcher.match(post.text);
-    const broad = !matched && maybeDj && this.matcher.matchBroad(post.text);
-    if (broad) matched = broad;
-    if (!matched) return { age, key: post.key };
-    post.broad = !!broad;
+    const decision = this.matcher.classify(post.text);
+    const recent = age === null || age <= this.maxAgeMs;
+    const note = (code, reason, extra = {}) => this.recordDecision(post, code, reason, { phrase: decision.phrase, by: decision.by, ...extra });
+    if (decision.kind === 'none') {
+      if (decision.candidate && recent) note('not_recognized', 'מזכיר דיג׳יי/מוזיקה אבל לא זוהה כבקשה');
+      return { age, key: post.key };
+    }
+    if (decision.kind === 'excluded') {
+      if (recent) note('excluded', `נפסל בגלל «${decision.by}»`);
+      return { age, key: post.key };
+    }
+    const matched = decision.phrase;
+    post.broad = decision.kind === 'broad';
     if (this.seenThisRun.has(post.key)) return { age, key: post.key };
     this.seenThisRun.add(post.key);
 
     const who = [post.authorName, post.groupName && `בקבוצה ${post.groupName}`].filter(Boolean).join(' ') || '?';
     if (age === null) {
       log(`⏭  דילוג – לא הצלחתי לזהות מתי הפוסט עלה (${who})`);
+      note('skipped_no_time', 'לא זוהה מתי הפוסט עלה');
       return { age, key: post.key };
     }
     if (age > this.maxAgeMs) {
       log(`⏭  דילוג – פוסט ישן (${post.ageText}): ${who}`);
+      note('skipped_old', `ישן מ-${this.cfg.max_post_age_days ?? 3} ימים`);
       return { age, key: post.key };
     }
     if (this.storage.postHandled(post.key)) {
@@ -703,6 +715,7 @@ class DJAgent {
     }
     if (this.storage.textHandled(post.text)) {
       log(`⏭  דילוג – אותו טקסט כבר נשלח אליך (פוסט שפורסם בכמה מקומות): ${who}`);
+      note('skipped_same_text', 'אותו טקסט כבר נשלח (פוסט שפורסם בכמה מקומות)');
       return { age, key: post.key };
     }
 
@@ -712,6 +725,7 @@ class DJAgent {
 
     if (this.dryRun) {
       log('   [בדיקה] היה נשלח אליך לווצאפ');
+      note('test_mode', 'מצב בדיקה – היה נשלח');
       return { age, key: post.key };
     }
     try {
@@ -726,12 +740,32 @@ class DJAgent {
       events.emit('lead', this.storage.recentLeads(1)[0]);
       this.setStatus(this.status.state, this.status.detail);
       log('   ✔ נשלח אליך לווצאפ');
+      this.recordDecision(post, post.broad ? 'sent_broad' : 'sent', post.broad ? 'נשלח כליד רחב' : 'נשלח', { phrase: matched });
     } catch (e) {
       this.sendFailures++;
       log(`   ✘ שליחה לווצאפ נכשלה: ${e.message.split('\n')[0]}`);
+      this.recordDecision(post, 'send_failed', `השליחה נכשלה: ${e.message.split('\n')[0]}`, { phrase: matched });
     }
     await page.bringToFront();
     return { age, key: post.key };
+  }
+
+  recordDecision(post, decision, reason, { phrase = null, by = null } = {}) {
+    try {
+      this.decisions.add({
+        decision,
+        reason,
+        url: post.url || post.key,
+        group: post.groupName || '',
+        author: post.authorName || '',
+        age: post.ageText || '',
+        phrase,
+        by,
+        text: post.text,
+      });
+    } catch (e) {
+      log(`   ✘ לא הצלחתי לכתוב לקובץ ההחלטות: ${e.message.split('\n')[0]}`);
+    }
   }
 
   /** The post that was found, in the terminal and in dj_agent.log (for checking afterwards). */
