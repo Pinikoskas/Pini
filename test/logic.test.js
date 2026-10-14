@@ -550,8 +550,9 @@ test('decisions file: every decision with its reason, each post once, reset from
 test('decisions file 13–14/10: real posts', () => {
   const m = new PostMatcher();
   const send = (t) => ['dj', 'broad'].includes(m.classify(t).kind);
+  // a DJ station, not a DJ: stays excluded (the owner checked it)
+  assert.ok(!send('אשמח להמלצות על עמדת אפטר לדיג׳י לחתונה מאיזור חיפה קריות'));
   // missed before
-  assert.ok(send('אשמח להמלצות על עמדת אפטר לדיג׳י לחתונה מאיזור חיפה קריות'));
   assert.ok(send('משתגעים כבר מחיפוש DJ שיתאים לנו בכיוון של מיינסטרים אנגלית, עברית, מי יכול להתאים?'));
   // still sent
   assert.ok(send('מחפשת די-ג׳יי לחינה ביתית ב22.10'));

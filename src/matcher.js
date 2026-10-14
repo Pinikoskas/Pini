@@ -126,8 +126,8 @@ const DEFAULT_EXCLUDE = [
   String.raw`(?:מורה|מורים|שיעור|שיעורי|קורס|קורסים|ללמוד|לימודי)\s*(?:ל-?|ב-?)?\s*` + DJ_WORD,
 
   // Buying / selling equipment: "מחפש לקנות עמדת DJ", "מוכר ציוד DJ"
-  // ("עמדת אפטר לדיג'י לחתונה" is a request, so "עמדת" / "ציוד" alone don't exclude)
-  String.raw`(?:לקנות|קונה|למכור|מוכר|מוכרת|קונטרולר|controller|מיקסר)[\s\S]{0,20}?` + DJ_WORD,
+  // "אשמח להמלצות על עמדת אפטר לדיג'י" is someone looking for a DJ station, not for a DJ (owner's call).
+  String.raw`(?:לקנות|קונה|למכור|מוכר|מוכרת|עמדת|עמדה|ציוד|קונטרולר|controller|מיקסר)[\s\S]{0,20}?` + DJ_WORD,
   DJ_WORD + String.raw`[\s\S]{0,20}?(?:למכירה|יד\s+2|יד\s+שנייה|במצב\s+מעולה)`,
 
   // Recommending or thanking a DJ after the event: "ממליצה בחום על הדיג'יי", "תודה לדיג'יי"
