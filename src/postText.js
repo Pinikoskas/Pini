@@ -41,7 +41,8 @@ function samePost(a, b) {
   const x = letters(a);
   const y = letters(b);
   const [short, long] = x.length <= y.length ? [x, y] : [y, x];
-  if (short.length < 40) return false;
+  // A short post ("אשמח לדיג'י למסיבה מומלץ מניסיון תודה") must match exactly.
+  if (short.length < 40) return short.length >= 12 && short === long;
   const start = Math.floor(short.length * 0.25);
   const piece = short.slice(start, start + Math.min(150, short.length - start));
   return long.includes(piece);

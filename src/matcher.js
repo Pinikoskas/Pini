@@ -24,7 +24,7 @@ const DJ_WORD = String.raw`(?:` +
 
 // Ways of asking for something: "מחפשים", "מי מכיר", "אשמח להמלצה", "כמה עולה", "חייבים"...
 const ASK = String.raw`(?:` +
-  String.raw`מחפש|מחפשת|מחפשים|מחפשות|מחפש/ת|מחפשים/ות|` +
+  String.raw`מחפש|מחפשת|מחפשים|מחפשות|מחפש/ת|מחפשים/ות|(?:ב|מ)חיפוש|` +
   String.raw`צריך|צריכה|צריכים|צריכות|צריך/ה|` +
   String.raw`חייב|חייבת|חייבים|חייבות|` +
   String.raw`דרוש|דרושה|דרושים|דרושות|` +
@@ -60,7 +60,7 @@ const DEFAULT_INCLUDE = [
   // "דיג'יי מי פנוי בתאריך...?"
   DJ_WORD + String.raw`[\s\S]{0,30}?(?:מי\s+)?(?:פנוי|פנויה|פנויים|זמין|זמינה|זמינים)`,
   // "איזה דיג'יי מומלץ", "מי הדיג'יי"
-  String.raw`(?:איזה|איזו|מי\s+ה|איזה\s+ה)\s*` + DJ_WORD,
+  String.raw`(?:איזה|איזו)\s+(?:ה)?` + DJ_WORD,
   // טעויות הקלדה נפוצות כמו "מחפשים דייגים לחתונה" (דייגים בהקשר אירוע)
   ASK + String.raw`[\s\S]{0,30}?דייגים[\s\S]{0,30}?(?:ל-?` + EVENT + `|` + EVENT + `)`
 ];
@@ -68,9 +68,12 @@ const DEFAULT_INCLUDE = [
 // "Broad leads": no DJ mentioned, but someone planning an event looks for suppliers, a production,
 // sound or music ("מחפשים ספקים לחתונה", "מחפשת הפקה לבר מצווה"). Sent marked as a broad lead.
 const SUPPLIER = String.raw`(?:ספקים|הפקה|הפקת|הפקות|מפיק|מפיקה|מפיקת|הגברה|מוזיקה|הפעלה|הפעלות)`;
+// The request must be right next to what is requested ("מחפשים ספקים", "אשמח להמלצות לתאורה והגברה"),
+// or the supplier right before a recommendation word ("מפיק מומלץ?"). Wider gaps caught posts that
+// only mention suppliers on the way (decisions file 13–14/10).
 const DEFAULT_BROAD = [
-  ASK + String.raw`[\s\S]{0,60}?` + SUPPLIER,
-  SUPPLIER + String.raw`[\s\S]{0,40}?` + ASK
+  ASK + String.raw`[^\n.!?,]{0,15}?` + SUPPLIER,
+  SUPPLIER + String.raw`[^\n.!?,]{0,10}?(?:מומלץ|מומלצת|מומלצים|מומלצות|מישהו\s+מכיר|מכירים|המלצות?)`,
 ];
 
 const BROAD_EXCLUDE = [
@@ -83,6 +86,8 @@ const BROAD_EXCLUDE = [
   String.raw`(?:דברו|דברי|שברו|כתבו|פנו|תפנו)\s+(?:איתי|אליי|אלי|איתנו|אלינו)|תייגו|במחירי\s+(?:היכרות|השקה)`,
   // Promoting a group: "פתחתי מחדש את הקבוצות הסגורות שלי לכלות"
   String.raw`הקבוצ(?:ה|ות)\s+(?:\S+\s+)?שלי|פתחתי\s+(?:מחדש\s+)?(?:את\s+)?(?:ה)?קבוצ`,
+  // Courses, jobs, group posts and stories, not someone hiring (decisions file 13–14/10)
+  String.raw`קורס|לימודי|ללמוד|הזדמנות|עוזר(?:ת)?\s+ל|לעבוד|משרה|זה\s+הזמן\s+ל|שאתם\s+עובדים|החלטנו\s+לא|לא\s+לקחת|לפרוק|תובנות|עצות`,
   // A phone number in the post: almost always a supplier's ad
   String.raw`(?<!\d)0(?:5\d|[2-489]|7\d)-?\d{3}-?\d{4}(?!\d)`,
 ];
@@ -105,6 +110,12 @@ const DEFAULT_EXCLUDE = [
   String.raw`תייגו\s+(?:זוגות|חברים|כלות|חתנים)`,
   String.raw`(?:יעשה|נעשה|נסדר|נדאג|נתאים|ניתן)\s+לכ[םן]\s+(?:בראש|שמח|קרחנה)`,
 
+  // From the decisions file (13–14/10): DJ teams, link-in-bio ads, apps for DJs, stories
+  String.raw`(?:אני|אנחנו)\s+(?:צוות|חברת|להקת|הרכב)\s+(?:של\s+)?(?:ה)?` + DJ_WORD + String.raw`|פותחים\s+תאריכים`,
+  String.raw`linktr\.ee|זה\s+הזמן\s+ל(?:בדוק|הזמין|סגור)|הצטרפו\s+ל|בתגובה\s+הראשונה`,
+  String.raw`כל\s+מה\s+ש(?:ה)?` + DJ_WORD + String.raw`\s+צריך`,
+  String.raw`ה?המלצה\s+(?:היא|שלי)\s+(?:על|ל)`,
+
   // DJs looking for work, partners or gigs
   String.raw`מחפש(?:ת|ים)?\s+(?:עבודה|אירועים|הופעות|לקוחות|שותף|שותפה|להצטרף|משרה|גיגים|לתקלט)`,
 
@@ -115,7 +126,8 @@ const DEFAULT_EXCLUDE = [
   String.raw`(?:מורה|מורים|שיעור|שיעורי|קורס|קורסים|ללמוד|לימודי)\s*(?:ל-?|ב-?)?\s*` + DJ_WORD,
 
   // Buying / selling equipment: "מחפש לקנות עמדת DJ", "מוכר ציוד DJ"
-  String.raw`(?:לקנות|קונה|למכור|מוכר|מוכרת|עמדת|עמדה|ציוד|קונטרולר|controller|מיקסר)[\s\S]{0,20}?` + DJ_WORD,
+  // ("עמדת אפטר לדיג'י לחתונה" is a request, so "עמדת" / "ציוד" alone don't exclude)
+  String.raw`(?:לקנות|קונה|למכור|מוכר|מוכרת|קונטרולר|controller|מיקסר)[\s\S]{0,20}?` + DJ_WORD,
   DJ_WORD + String.raw`[\s\S]{0,20}?(?:למכירה|יד\s+2|יד\s+שנייה|במצב\s+מעולה)`,
 
   // Recommending or thanking a DJ after the event: "ממליצה בחום על הדיג'יי", "תודה לדיג'יי"

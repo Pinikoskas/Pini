@@ -172,6 +172,11 @@ function buildSources(cfg) {
   return sources;
 }
 
+/** A link to one post (not to a group or a profile). */
+function isPostUrl(href) {
+  return /\/(?:posts|permalink|videos|reel|p)\/|story_fbid=|[?&]fbid=|pfbid|multi_permalinks=|\/photo/.test(String(href || ''));
+}
+
 function canonicalPostUrl(href) {
   const u = new URL(href);
   const keep = ['story_fbid', 'id', 'fbid', 'v']
@@ -631,14 +636,21 @@ class DJAgent {
       }
     }
 
+    // The post's own link. Facebook often fills the time link in only on hover (before that it
+    // points at the group), so hover it when it isn't a post link yet.
     let url = '';
-    let key;
-    if (info.stamps.length) {
-      url = canonicalPostUrl(info.stamps[0].href);
-      key = url;
-    } else {
-      key = 'hash:' + crypto.createHash('sha1').update(info.authorHref + text.slice(0, 300)).digest('hex');
+    for (let i = 0; i < info.stamps.length && !url; i++) {
+      let href = info.stamps[i].href;
+      if (!isPostUrl(href)) {
+        const link = el.locator(`a[data-djbot-ts="${i}"]`).first();
+        await link.hover({ timeout: 3000 }).catch(() => {});
+        await sleep(400);
+        href = (await link.evaluate((a) => a.href).catch(() => '')) || href;
+      }
+      if (isPostUrl(href)) url = canonicalPostUrl(href);
     }
+    // Never a group's link as the post's identity: then all such posts would look like one post.
+    const key = url || 'hash:' + crypto.createHash('sha1').update(info.authorHref + text.slice(0, 300)).digest('hex');
 
     return {
       key,
@@ -647,6 +659,8 @@ class DJAgent {
       authorName: info.authorName,
       // Inside a group the post itself doesn't link the group: use the group being scanned.
       groupName: info.groupName || (this.currentSource && this.currentSource.groupName) || '',
+      // When the post's own link couldn't be read: at least the group it's in.
+      groupLink: (this.currentSource && this.currentSource.groupId && `https://www.facebook.com/groups/${this.currentSource.groupId}`) || '',
       authorUrl: canonicalProfileUrl(info.authorHref),
       ageText,
     };
@@ -753,9 +767,10 @@ class DJAgent {
   recordDecision(post, decision, reason, { phrase = null, by = null } = {}) {
     try {
       this.decisions.add({
+        id: post.key,
         decision,
         reason,
-        url: post.url || post.key,
+        url: post.url || post.groupLink || '',
         group: post.groupName || '',
         author: post.authorName || '',
         age: post.ageText || '',
@@ -823,4 +838,4 @@ async function main() {
   });
 }
 
-module.exports = { main, canonicalPostUrl, canonicalProfileUrl, buildSources, groupUrl, jsNewPosts, jsPostInfo, DJAgent, POST_SELECTOR };
+module.exports = { main, isPostUrl, canonicalPostUrl, canonicalProfileUrl, buildSources, groupUrl, jsNewPosts, jsPostInfo, DJAgent, POST_SELECTOR };

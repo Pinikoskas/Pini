@@ -18,7 +18,7 @@ class DecisionLog {
     for (const line of fs.readFileSync(this.file, 'utf8').split('\n')) {
       try {
         const d = JSON.parse(line);
-        this.seen.add(`${d.url}|${d.decision}`);
+        this.seen.add(`${d.id || d.url}|${d.decision}`);
       } catch {
         // an empty or broken line
       }
@@ -29,7 +29,7 @@ class DecisionLog {
   add(entry) {
     if (!this.file) return;
     if (!fs.existsSync(this.file)) this.seen.clear(); // reset from the panel
-    const id = `${entry.url}|${entry.decision}`;
+    const id = `${entry.id || entry.url}|${entry.decision}`;
     if (this.seen.has(id)) return;
     this.seen.add(id);
     const line = { time: new Date().toISOString(), ...entry, text: String(entry.text || '').slice(0, 1500) };

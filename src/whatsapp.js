@@ -13,6 +13,7 @@ function formatPostMessage(post, ageDesc) {
     '',
   ];
   if (post.url) lines.push(`🔗 ${post.url}`);
+  else if (post.groupLink) lines.push(`🔗 הקבוצה (לא הצלחתי לקבל קישור לפוסט עצמו): ${post.groupLink}`);
   if (post.authorUrl) lines.push(`פרופיל: ${post.authorUrl}`);
   return lines.join('\n').trim();
 }

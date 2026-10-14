@@ -546,3 +546,39 @@ test('decisions file: every decision with its reason, each post once, reset from
   d.add({ decision: 'sent', url: 'u1', text: 'a' }); // written again after the reset
   assert.equal(new DecisionLog(file).summary().count, 1);
 });
+
+test('decisions file 13–14/10: real posts', () => {
+  const m = new PostMatcher();
+  const send = (t) => ['dj', 'broad'].includes(m.classify(t).kind);
+  // missed before
+  assert.ok(send('אשמח להמלצות על עמדת אפטר לדיג׳י לחתונה מאיזור חיפה קריות'));
+  assert.ok(send('משתגעים כבר מחיפוש DJ שיתאים לנו בכיוון של מיינסטרים אנגלית, עברית, מי יכול להתאים?'));
+  // still sent
+  assert.ok(send('מחפשת די-ג׳יי לחינה ביתית ב22.10'));
+  assert.ok(send('אשמח להמלצות לדיגי שמתאים לחינה מרוקאית וצלם במחיר נוח'));
+  assert.ok(send('אשמח להמלצות לתאורה והגברה לחתונה באיזור ירושלים מניסיון אישי'));
+  assert.ok(send('היי מחפש מפיק חינה עם תפאורה לבוש וכל מה שצריך במחיר שפוי אזור הדרום'));
+  // sent by mistake before
+  for (const t of [
+    'ממה עשית עניין סה״כ נשיקה! העלאת מוזיקה יומית, הפרדת סטמים, תכנון סטים חכם וכל מה שדיג׳יי צריך במקום אחד! הצטרפו ל-teamix עכשיו בתגובה הראשונה',
+    'מחפשים דיג׳יי זה הזמן לבדוק https://linktr.ee/dvirbiton28',
+    'תקרית לא נעימה בחתונה שלי ובסופו של דבר לא עזבתי את רחבת הריקודים - כן ההמלצה היא על הדיג׳יי הטוב בעולם',
+    "מחפשים זוגות שרוצים חתונה שתדברו עליה! אנחנו צוות של די ג'יי מקצועיים, ועכשיו אנחנו פותחים תאריכים",
+    'בנובמבר מדור חדש!!! הספקים המקצועניים לאירוע מושלם! זה הזמן להמליץ על ספקים טובים שאתם עובדים איתם',
+    'אני מחפשת הזדמנות להתחיל כעוזרת למפיק/ת אירועים, ללמוד מהשטח ולהוכיח את עצמי',
+    'היי. אני ובן זוגי החלטנו לא לקחת מפיק לחתונה. ויש לנו מנהל אירוע מתאם האולם האם הוא דואג לכל מה שצריך במידה שמפיק דואג?',
+    'למישהו יש המלצה לקורס פרונטלי של הפקות אירועים? אשמח להמלצות',
+    'פוסט מס 6 בדרך לעבודה מי ה dj הכי טוב ? מי הזמר הכי טוב ?',
+  ]) {
+    assert.ok(!send(t), t);
+  }
+  // the same short post twice
+  const { samePost } = require('../src/postText');
+  assert.ok(samePost('אשמח לדיג׳י למסיבה מומלץ מניסיון תודה', 'אשמח לדיג׳י למסיבה מומלץ מניסיון תודה'));
+  assert.ok(!samePost('מחפשת דיג׳י לחינה', 'מחפשת דיג׳י לחתונה'));
+  // a group's link is never taken as a post's
+  const { isPostUrl } = require('../src/agent');
+  assert.ok(!isPostUrl('https://www.facebook.com/groups/1150800911722172/'));
+  assert.ok(isPostUrl('https://www.facebook.com/groups/meorasim2024/posts/1915915439396108/'));
+  assert.ok(isPostUrl('https://www.facebook.com/tomer.amiel/posts/pfbid02fPZ2gm'));
+});
