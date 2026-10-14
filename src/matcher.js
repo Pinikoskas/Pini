@@ -65,33 +65,6 @@ const DEFAULT_INCLUDE = [
   ASK + String.raw`[\s\S]{0,30}?דייגים[\s\S]{0,30}?(?:ל-?` + EVENT + `|` + EVENT + `)`
 ];
 
-// "Broad leads": no DJ mentioned, but someone planning an event looks for suppliers, a production,
-// sound or music ("מחפשים ספקים לחתונה", "מחפשת הפקה לבר מצווה"). Sent marked as a broad lead.
-const SUPPLIER = String.raw`(?:ספקים|הפקה|הפקת|הפקות|מפיק|מפיקה|מפיקת|הגברה|מוזיקה|הפעלה|הפעלות)`;
-// The request must be right next to what is requested ("מחפשים ספקים", "אשמח להמלצות לתאורה והגברה"),
-// or the supplier right before a recommendation word ("מפיק מומלץ?"). Wider gaps caught posts that
-// only mention suppliers on the way (decisions file 13–14/10).
-const DEFAULT_BROAD = [
-  ASK + String.raw`[^\n.!?,]{0,15}?` + SUPPLIER,
-  SUPPLIER + String.raw`[^\n.!?,]{0,10}?(?:מומלץ|מומלצת|מומלצים|מומלצות|מישהו\s+מכיר|מכירים|המלצות?)`,
-];
-
-const BROAD_EXCLUDE = [
-  // Suppliers advertising themselves: "אני מפיקת אירועים", "אנחנו חברת הפקות"
-  String.raw`(?:אני|אנחנו)\s+(?:חברת\s+)?` + SUPPLIER,
-  // Looking for customers, not for a supplier: "מחפשת זוגות מאורסים שרוצים לקבל הפקת אירוע"
-  String.raw`(?:מחפש|מחפשת|מחפשים|מחפשות)\s+(?:עבודה|לקוחות|זוגות|כלות|חתנים|משפחות|הורים|ספקים\s+חדשים\s+ל(?:עסק|חברה))`,
-  // Ad language: "רק אצל נאור הפקות", "נסדר לכם", "דברו איתי", "תייגו", "במחירי היכרות"
-  String.raw`רק\s+אצל|(?:ש)?(?:יעשה|תעשה|נעשה|נסדר|נדאג|נפיק|אסדר|אדאג|אעלה|אפיק|נתאים)\s+לכ[םן]|(?:עבורכ|בשבילכ)[םן]`,
-  String.raw`(?:דברו|דברי|שברו|כתבו|פנו|תפנו)\s+(?:איתי|אליי|אלי|איתנו|אלינו)|תייגו|במחירי\s+(?:היכרות|השקה)`,
-  // Promoting a group: "פתחתי מחדש את הקבוצות הסגורות שלי לכלות"
-  String.raw`הקבוצ(?:ה|ות)\s+(?:\S+\s+)?שלי|פתחתי\s+(?:מחדש\s+)?(?:את\s+)?(?:ה)?קבוצ`,
-  // Courses, jobs, group posts and stories, not someone hiring (decisions file 13–14/10)
-  String.raw`קורס|לימודי|ללמוד|הזדמנות|עוזר(?:ת)?\s+ל|לעבוד|משרה|זה\s+הזמן\s+ל|שאתם\s+עובדים|החלטנו\s+לא|לא\s+לקחת|לפרוק|תובנות|עצות`,
-  // A phone number in the post: almost always a supplier's ad
-  String.raw`(?<!\d)0(?:5\d|[2-489]|7\d)-?\d{3}-?\d{4}(?!\d)`,
-];
-
 // Posts that mention a DJ but aren't someone looking to hire one.
 const DEFAULT_EXCLUDE = [
   // DJs advertising themselves: "אני דיג'יי", "נעים מאוד, אני תומר, דיג'יי עם...", "לאירוע שלכם"
@@ -171,25 +144,7 @@ class PostMatcher {
     const compile = (list) => list.map((p) => new RegExp(p, 'i'));
     this.include = compile(include && include.length ? include : DEFAULT_INCLUDE);
     this.exclude = compile(exclude && exclude.length ? exclude : DEFAULT_EXCLUDE);
-    this.broad = compile(DEFAULT_BROAD);
-    this.broadExclude = compile(BROAD_EXCLUDE);
-    this.event = new RegExp(EVENT, 'i');
     this.djWord = new RegExp(DJ_WORD, 'i');
-  }
-
-  /**
-   * A broad lead: an event (wedding, bar mitzvah...) and a request for suppliers / production /
-   * sound / music, with no DJ in the text. Returns the matched phrase, or null.
-   */
-  matchBroad(text) {
-    const t = normalize(text);
-    if (this.djWord.test(t) || !this.event.test(t)) return null;
-    if (this.exclude.some((rx) => rx.test(t)) || this.broadExclude.some((rx) => rx.test(t))) return null;
-    for (const rx of this.broad) {
-      const m = t.match(rx);
-      if (m) return m[0];
-    }
-    return null;
   }
 
   /** Mentions a DJ (even misspelled) or music / sound: recorded in the decisions file. */
@@ -200,13 +155,13 @@ class PostMatcher {
   /** Cheap pre-check (ignores exclusions) used before reading the post in detail. */
   mightMatch(text) {
     const t = normalize(text);
-    if (this.include.some((rx) => rx.test(t)) || this.broad.some((rx) => rx.test(t))) return true;
+    if (this.include.some((rx) => rx.test(t))) return true;
     return TRUNCATED.test(t.trim()) && REQUEST_HINT.test(t);
   }
 
   /**
    * The full decision, with the reason, for the decisions file:
-   *   { kind: 'dj' | 'broad', phrase }            – a request (to send)
+   *   { kind: 'dj', phrase }                      – a request (to send)
    *   { kind: 'excluded', phrase, by }            – looked like a request, ruled out by `by`
    *   { kind: 'none', candidate: true|false }     – not a request; candidate = mentions DJ / music
    */
@@ -225,13 +180,6 @@ class PostMatcher {
       if (excludedBy) return { kind: 'excluded', phrase: dj, by: excludedBy };
       if (FISHING.test(t) && !this.djWord.test(t)) return { kind: 'excluded', phrase: dj, by: (t.match(FISHING) || [''])[0] };
       return { kind: 'dj', phrase: dj };
-    }
-    if (!this.djWord.test(t) && this.event.test(t)) {
-      const broad = first(this.broad);
-      if (broad) {
-        const by = excludedBy || first(this.broadExclude);
-        return by ? { kind: 'excluded', phrase: broad, by, broad: true } : { kind: 'broad', phrase: broad };
-      }
     }
     return { kind: 'none', candidate: CANDIDATE.test(t) };
   }

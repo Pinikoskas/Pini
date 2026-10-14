@@ -708,7 +708,6 @@ class DJAgent {
       return { age, key: post.key };
     }
     const matched = decision.phrase;
-    post.broad = decision.kind === 'broad';
     if (this.seenThisRun.has(post.key)) return { age, key: post.key };
     this.seenThisRun.add(post.key);
 
@@ -749,12 +748,11 @@ class DJAgent {
         authorName: post.authorName,
         groupName: post.groupName,
         groupId: this.currentSource && this.currentSource.groupId,
-        broad: post.broad,
       });
       events.emit('lead', this.storage.recentLeads(1)[0]);
       this.setStatus(this.status.state, this.status.detail);
       log('   ✔ נשלח אליך לווצאפ');
-      this.recordDecision(post, post.broad ? 'sent_broad' : 'sent', post.broad ? 'נשלח כליד רחב' : 'נשלח', { phrase: matched });
+      this.recordDecision(post, 'sent', 'נשלח', { phrase: matched });
     } catch (e) {
       this.sendFailures++;
       log(`   ✘ שליחה לווצאפ נכשלה: ${e.message.split('\n')[0]}`);
@@ -786,7 +784,7 @@ class DJAgent {
   /** The post that was found, in the terminal and in dj_agent.log (for checking afterwards). */
   printPost(post, matched, ageDesc) {
     const preview = post.text.replace(/\s+/g, ' ').slice(0, 250);
-    log(`${post.broad ? '🔎 ליד רחב' : '🎯 נמצא פוסט מתאים'}  |  ${post.authorName || '?'}${post.groupName ? `  |  ${post.groupName}` : ''}  |  עלה: ${ageDesc}`);
+    log(`🎯 נמצא פוסט מתאים  |  ${post.authorName || '?'}${post.groupName ? `  |  ${post.groupName}` : ''}  |  עלה: ${ageDesc}`);
     log(`   ביטוי שזוהה: «${matched}»`);
     log(`   ${preview}`);
     if (post.url) log(`   ${post.url}`);

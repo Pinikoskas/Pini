@@ -38,7 +38,7 @@ class Storage {
     return this.actions.some((a) => a.action === 'notify' && samePost(a.postText, text));
   }
 
-  record(postKey, authorUrl, action, postText = '', { authorName = '', groupName = '', groupId = null, broad = false } = {}) {
+  record(postKey, authorUrl, action, postText = '', { authorName = '', groupName = '', groupId = null } = {}) {
     this.reload();
     this.actions.push({
       postKey,
@@ -46,7 +46,6 @@ class Storage {
       authorName,
       groupName,
       ...(groupId ? { groupId } : {}),
-      ...(broad ? { broad: true } : {}),
       action,
       createdAt: new Date().toISOString(),
       postText: Array.from(fixBrokenChars(postText)).slice(0, 500).join(''), // whole characters, no broken emoji

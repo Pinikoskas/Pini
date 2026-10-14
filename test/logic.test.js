@@ -411,17 +411,6 @@ test('active hours 08:00–00:00, and weak groups every third round', () => {
   assert.ok(isDueThisRound(g, { ...opts, leads: [lead], lastCheckedAt: ago(30) })); // strong: a lead 5 days ago
 });
 
-test('broad leads: suppliers for an event without the word DJ', () => {
-  const m = new PostMatcher();
-  assert.ok(m.matchBroad('היי, אנחנו מתחתנים באוגוסט ומחפשים ספקים לחתונה, המלצות?'));
-  assert.ok(m.matchBroad('מחפשת הפקה לבר מצווה של הבן שלי בדצמבר'));
-  assert.ok(m.matchBroad('אשמח להמלצה על הגברה לאירוע של 150 איש'));
-  assert.equal(m.matchBroad('אני מפיקת אירועים עם 10 שנות ניסיון, לפרטים בפרטי'), null);
-  assert.equal(m.matchBroad("מחפשים דיג'יי לחתונה"), null); // a DJ request, not a broad lead
-  assert.equal(m.matchBroad('מחפשים ספק לחומרי בניין'), null); // no event
-  assert.ok(m.mightMatch('מחפשים ספקים לחתונה'));
-});
-
 test('config: active hours from the panel are saved as text', () => {
   const fs = require('fs');
   const os = require('os');
@@ -435,7 +424,7 @@ test('config: active hours from the panel are saved as text', () => {
   assert.throws(() => updateConfigValues(file, { active_from: '25:00' }));
 });
 
-test('review report 13/10: broad leads that were ads are filtered, real ones still pass', () => {
+test('review report 13/10: ads are not sent, real requests are', () => {
   const m = new PostMatcher();
   for (const ad of [
     'חן עלמה ציפורה לפני כשעה ‏1 שעות · משותף עם: קבוצה ציבורית מחפשת זוגות מאורסים שרוצים לקבל הפקת אירוע (לא ניהול ביום האירוע, הפקה שלמה!) במחירי היכרות באמת מצחיקים תייגו אותם או אם אלו אתם דברו איתי ישירות 0504227099',
@@ -443,11 +432,8 @@ test('review report 13/10: broad leads that were ads are filtered, real ones sti
     'מחפשים מפעיל שיעשה לכם אחלה אירוע רק אצל נאור הפקות שברו איתי נסדר לכם אירוע 0519585993',
     'לכל הכלות שמתכננות חתונה כרגע - זה בשבילכן פתחתי מחדש את הקבוצות הסגורות שלי לכלות. מקום שבו אפשר לקבל המלצות, ספקים, מציאות, רעיונות',
   ]) {
-    assert.equal(m.matchBroad(ad), null, ad);
     assert.equal(m.match(ad), null, ad);
   }
-  assert.ok(m.matchBroad('היי, אנחנו מתחתנים באוגוסט ומחפשים ספקים לחתונה, המלצות?'));
-  assert.ok(m.matchBroad('מחפשת הפקה לבר מצווה של הבן שלי בדצמבר'));
   assert.ok(m.match('מחפשת בדחיפות דיג׳אית אישה לאירוע מחר, 13.10, במעלה אדומים'));
   assert.ok(m.match('מחפשת המלצה לdj מומלץ ולצלם בר מצווה'));
   assert.ok(m.match('מחפשת דייגי לבת מצווה ברחובות')); // spelling from the report
@@ -531,7 +517,7 @@ test('decisions file: every decision with its reason, each post once, reset from
   const m = new PostMatcher();
   assert.deepEqual(m.classify("מחפשים דיג'יי לחתונה"), { kind: 'dj', phrase: "מחפשים דיג'יי" });
   assert.equal(m.classify("רוצה להמליץ בחום על הדיג'יי שלנו").kind, 'excluded');
-  assert.equal(m.classify('מחפשים ספקים לחתונה').kind, 'broad');
+  assert.equal(m.classify('מחפשים ספקים לחתונה').kind, 'none'); // no broad leads
   assert.deepEqual(m.classify("הדיג'יי היה מעולה"), { kind: 'none', candidate: true });
   assert.deepEqual(m.classify('מתכון לעוגת שוקולד'), { kind: 'none', candidate: false });
 
@@ -549,7 +535,7 @@ test('decisions file: every decision with its reason, each post once, reset from
 
 test('decisions file 13–14/10: real posts', () => {
   const m = new PostMatcher();
-  const send = (t) => ['dj', 'broad'].includes(m.classify(t).kind);
+  const send = (t) => m.classify(t).kind === 'dj';
   // a DJ station, not a DJ: stays excluded (the owner checked it)
   assert.ok(!send('אשמח להמלצות על עמדת אפטר לדיג׳י לחתונה מאיזור חיפה קריות'));
   // missed before
@@ -557,8 +543,7 @@ test('decisions file 13–14/10: real posts', () => {
   // still sent
   assert.ok(send('מחפשת די-ג׳יי לחינה ביתית ב22.10'));
   assert.ok(send('אשמח להמלצות לדיגי שמתאים לחינה מרוקאית וצלם במחיר נוח'));
-  assert.ok(send('אשמח להמלצות לתאורה והגברה לחתונה באיזור ירושלים מניסיון אישי'));
-  assert.ok(send('היי מחפש מפיק חינה עם תפאורה לבוש וכל מה שצריך במחיר שפוי אזור הדרום'));
+  assert.ok(!send('אשמח להמלצות לתאורה והגברה לחתונה באיזור ירושלים מניסיון אישי')); // no broad leads
   // sent by mistake before
   for (const t of [
     'ממה עשית עניין סה״כ נשיקה! העלאת מוזיקה יומית, הפרדת סטמים, תכנון סטים חכם וכל מה שדיג׳יי צריך במקום אחד! הצטרפו ל-teamix עכשיו בתגובה הראשונה',
