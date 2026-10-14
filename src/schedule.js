@@ -53,15 +53,15 @@ function isDueThisRound(source, { leads, lastCheckedAt, everyMinutes, now = Date
 }
 
 /**
- * The order of a round: the feed, then groups that brought matching posts in the last 30 days
- * (most first), then groups about DJs, then the rest as in groups.txt. So the most useful pages
- * are scanned first, even when the round runs long.
+ * The order of a round: groups that brought matching posts in the last 30 days (most first), then
+ * groups about DJs, then the rest as in groups.txt, and the main feed last. So the most useful
+ * pages are scanned first, even when the round runs long.
  */
 function orderSources(sources, leads, { now = Date.now(), strongDays = 30 } = {}) {
   const since = now - strongDays * DAY;
   const count = (s) =>
     leads.filter((a) => Date.parse(a.createdAt) > since && (a.groupId === s.groupId || String(a.postKey).includes(`/groups/${s.groupId}/`))).length;
-  const rank = (s) => (!s.groupId ? [0, 0] : count(s) ? [1, -count(s)] : isDjGroupName(s.groupName) ? [2, 0] : [3, 0]);
+  const rank = (s) => (!s.groupId ? [4, 0] : count(s) ? [1, -count(s)] : isDjGroupName(s.groupName) ? [2, 0] : [3, 0]);
   return sources
     .map((s, i) => ({ s, i, r: rank(s) }))
     .sort((a, b) => a.r[0] - b.r[0] || a.r[1] - b.r[1] || a.i - b.i)

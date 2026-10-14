@@ -466,7 +466,7 @@ test('review report 13/10: round order, network errors, bookmark by time', () =>
     { groupId: 'brides', groupName: 'מאורסים 25/26' },
   ];
   const leads = [{ action: 'notify', groupId: 'brides', createdAt: new Date(now - 864e5).toISOString() }];
-  assert.deepEqual(orderSources(sources, leads, { now }).map((s) => s.groupId || 'feed'), ['feed', 'brides', 'dj', 'city']);
+  assert.deepEqual(orderSources(sources, leads, { now }).map((s) => s.groupId || 'feed'), ['brides', 'dj', 'city', 'feed']);
 
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'djseen2-')), 'groups_last_seen.json');
   const seen = new GroupsLastSeen(file);
