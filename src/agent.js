@@ -87,6 +87,20 @@ function jsPostInfo(el) {
     stamps.push({ href: a.href, label: a.getAttribute('aria-label') || '', text: (a.innerText || '').trim() });
     if (i >= 6) break;
   }
+  // The time link before Facebook fills it in (on hover): a short link to "#" or to the group itself.
+  const pending = [];
+  for (const a of el.querySelectorAll('a[href]')) {
+    if (pending.length >= 3) break;
+    if (a === authorA || a === groupA || a.dataset.djbotTs) continue;
+    if (el.matches('[role="article"]') && a.closest('[role="article"]') !== el) continue;
+    const text = (a.getAttribute('aria-label') || a.innerText || '').trim();
+    const raw = a.getAttribute('href') || '';
+    if (!text || text.length > 40) continue;
+    if (raw === '#' || raw.startsWith('#') || isGroupLink(a.href) || /__cft__/.test(raw)) {
+      a.dataset.djbotPending = String(pending.length);
+      pending.push({ label: a.getAttribute('aria-label') || '', text: (a.innerText || '').trim() });
+    }
+  }
   // Post text without the comments under it (comments are nested role="article" elements).
   const root = el.matches('[role="article"]') ? el : el.querySelector('[role="article"]') || el;
   const parts = [];
@@ -104,6 +118,7 @@ function jsPostInfo(el) {
     authorHref: authorA ? authorA.href : '',
     groupName: groupA ? groupA.innerText.trim().split('\n')[0] : '',
     stamps,
+    pending,
   };
 }
 
@@ -174,11 +189,15 @@ function buildSources(cfg) {
 
 /** A link to one post (not to a group or a profile). */
 function isPostUrl(href) {
-  return /\/(?:posts|permalink|videos|reel|p)\/|story_fbid=|[?&]fbid=|pfbid|multi_permalinks=|\/photo/.test(String(href || ''));
+  return /\/(?:posts|permalink|videos|reel|p)\/|story_fbid=|[?&]fbid=|pfbid|multi_permalinks=|[?&]set=gm\.|\/photo/.test(String(href || ''));
 }
 
 function canonicalPostUrl(href) {
   const u = new URL(href);
+  // In groups the post is often "/groups/<id>/?multi_permalinks=<post>": the post id is in the query.
+  const group = u.pathname.match(/^\/groups\/([^/]+)/);
+  const inQuery = (u.searchParams.get('multi_permalinks') || '').split(',')[0] || ((u.searchParams.get('set') || '').match(/^gm\.(\d+)/) || [])[1];
+  if (group && inQuery && !/\/(?:posts|permalink)\//.test(u.pathname)) return `https://www.facebook.com/groups/${group[1]}/posts/${inQuery}`;
   const keep = ['story_fbid', 'id', 'fbid', 'v']
     .filter((k) => u.searchParams.has(k))
     .map((k) => `${k}=${u.searchParams.get(k)}`);
@@ -639,7 +658,11 @@ class DJAgent {
     // The post's own link. Facebook often fills the time link in only on hover (before that it
     // points at the group), so hover it when it isn't a post link yet.
     let url = '';
-    for (let i = 0; i < info.stamps.length && !url; i++) {
+    // A photo's link is a fallback only: the time link leads to the post itself.
+    const isPhoto = (h) => /\/photo|[?&]fbid=/.test(String(h || '')) && !/\/posts\/|multi_permalinks=|story_fbid=/.test(String(h || ''));
+    const order = info.stamps.map((st, i) => i).sort((x, y) => isPhoto(info.stamps[x].href) - isPhoto(info.stamps[y].href));
+    for (const i of order) {
+      if (url) break;
       let href = info.stamps[i].href;
       if (!isPostUrl(href)) {
         const link = el.locator(`a[data-djbot-ts="${i}"]`).first();
@@ -648,6 +671,20 @@ class DJAgent {
         href = (await link.evaluate((a) => a.href).catch(() => '')) || href;
       }
       if (isPostUrl(href)) url = canonicalPostUrl(href);
+    }
+    for (let i = 0; i < (info.pending || []).length && !url; i++) {
+      const link = el.locator(`a[data-djbot-pending="${i}"]`).first();
+      await link.hover({ timeout: 3000 }).catch(() => {});
+      await sleep(400);
+      const href = await link.evaluate((a) => a.href).catch(() => '');
+      if (isPostUrl(href)) {
+        url = canonicalPostUrl(href);
+        if (!ageText) ageText = [info.pending[i].label, info.pending[i].text].find((c) => parsePostAge(c) !== null) || '';
+        if (!ageText) {
+          const tip = await this.hoverTooltip(page, link);
+          if (parsePostAge(tip) !== null) ageText = tip;
+        }
+      }
     }
     // Never a group's link as the post's identity: then all such posts would look like one post.
     const key = url || 'hash:' + crypto.createHash('sha1').update(info.authorHref + text.slice(0, 300)).digest('hex');

@@ -567,4 +567,10 @@ test('decisions file 13–14/10: real posts', () => {
   assert.ok(!isPostUrl('https://www.facebook.com/groups/1150800911722172/'));
   assert.ok(isPostUrl('https://www.facebook.com/groups/meorasim2024/posts/1915915439396108/'));
   assert.ok(isPostUrl('https://www.facebook.com/tomer.amiel/posts/pfbid02fPZ2gm'));
+  // "/groups/<id>/?multi_permalinks=<post>": the post's id is in the query (it used to be dropped)
+  const { canonicalPostUrl } = require('../src/agent');
+  assert.equal(
+    canonicalPostUrl('https://www.facebook.com/groups/1150800911722172/?multi_permalinks=2508369069642101&__cft__[0]=AZ'),
+    'https://www.facebook.com/groups/1150800911722172/posts/2508369069642101',
+  );
 });
