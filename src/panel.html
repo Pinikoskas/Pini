@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="he" dir="rtl" translate="no">
+<head>
+<meta charset="utf-8">
+<meta name="google" content="notranslate">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>סוכן הדיג'יי</title>
+<link rel="icon" href="/icon.png">
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #1d2330; --muted: #6b7280; --line: #e3e6eb;
+    --accent: #6d28d9; --accent-soft: #ede9fe; --ok: #15803d; --ok-soft: #dcfce7;
+    --warn: #b45309; --warn-soft: #fef3c7; --bad: #b91c1c; --bad-soft: #fee2e2;
+    --log-bg: #0f1420; --log-text: #d6dbe5; --chart: #6d28d9; --grid: #eceef2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --card: #161b22; --text: #e6e9ef; --muted: #8b95a5; --line: #2a313c;
+      --accent: #a78bfa; --accent-soft: #2e2550; --ok: #4ade80; --ok-soft: #12331f;
+      --warn: #fbbf24; --warn-soft: #3a2c0b; --bad: #f87171; --bad-soft: #3b1414;
+      --log-bg: #0a0d13; --log-text: #c9d1dc; --chart: #8b5cf6; --grid: #222833;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 "Segoe UI", Arial, sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; background: var(--card); border-bottom: 1px solid var(--line); }
+  .bar { max-width: 1200px; margin: 0 auto; padding: 12px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  h1 { font-size: 20px; margin: 0; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-weight: 600; font-size: 14px; background: var(--line); }
+  .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .pill.running { background: var(--ok-soft); color: var(--ok); }
+  .pill.waiting { background: var(--accent-soft); color: var(--accent); }
+  .pill.busy { background: var(--warn-soft); color: var(--warn); }
+  .pill.stopped { color: var(--muted); }
+  .detail { color: var(--muted); font-size: 14px; flex: 1; min-width: 160px; }
+  .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 7px 14px; border-radius: 8px; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.danger { color: var(--bad); border-color: var(--bad); }
+  button.small { padding: 4px 10px; font-size: 13px; }
+  label.check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); cursor: pointer; }
+  main { max-width: 1200px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); }
+  .col { display: grid; gap: 16px; align-content: start; min-width: 0; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+  section h2 { font-size: 16px; margin: 0 0 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+  .field { display: grid; gap: 4px; margin-bottom: 10px; }
+  .field span { font-size: 13px; color: var(--muted); }
+  input[type=text], input[type=number], input[type=search] { font: inherit; width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .msg { font-size: 13px; min-height: 18px; }
+  .msg.ok { color: var(--ok); } .msg.bad { color: var(--bad); }
+  .groups { max-height: 420px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; margin-top: 10px; }
+  .group { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .group:last-child { border-bottom: 0; }
+  .group .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .group.off .name { color: var(--muted); }
+  .group a { color: var(--muted); font-size: 12px; text-decoration: none; }
+  .switch { position: relative; width: 38px; height: 22px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch span { position: absolute; inset: 0; border-radius: 22px; background: var(--line); transition: .15s; cursor: pointer; }
+  .switch span::after { content: ""; position: absolute; top: 3px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: .15s; }
+  .switch input:checked + span { background: var(--accent); }
+  .switch input:checked + span::after { right: 19px; }
+  .switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .empty { color: var(--muted); padding: 16px; text-align: center; }
+  .log { background: var(--log-bg); color: var(--log-text); border-radius: 8px; padding: 10px 12px; height: 460px; overflow-y: auto; font: 13px/1.6 Consolas, "Courier New", monospace; }
+  .log div { white-space: pre-wrap; word-break: break-word; }
+  .log .t { color: #7d8799; margin-left: 8px; direction: ltr; unicode-bidi: isolate; }
+  .log .ok { color: #4ade80; } .log .bad { color: #f87171; } .log .warn { color: #fbbf24; } .log .hit { color: #c4b5fd; font-weight: 600; } .log .skip { color: #7d8799; }
+  .leads { display: grid; gap: 10px; }
+  .lead { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .lead .who { font-weight: 600; }
+  .lead .meta { color: var(--muted); font-size: 13px; }
+  .lead p { margin: 6px 0; font-size: 14px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .lead a { color: var(--accent); font-size: 14px; }
+  .stat { font-size: 14px; color: var(--muted); }
+  .xbtn { border: 0; background: none; color: var(--muted); padding: 2px 6px; font-size: 15px; border-radius: 6px; }
+  .xbtn:hover { color: var(--bad); background: var(--bad-soft); }
+  .lead { position: relative; }
+  .lead .xbtn { position: absolute; top: 6px; left: 6px; }
+  .marks { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+  .mark { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .mark:last-child { border-bottom: 0; }
+  .mark .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mark .when { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .mark a { color: var(--accent); font-size: 13px; white-space: nowrap; }
+  .stat b { color: var(--text); }
+  .bar-track { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; margin: 8px 0 6px; }
+  .bar-fill { height: 100%; width: 0; background: var(--chart); border-radius: 999px; transition: width .4s; }
+  .progress-text { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+  .progress-text b { color: var(--text); }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0 10px; }
+  .tile { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  .tile .k { font-size: 12.5px; color: var(--muted); }
+  .tile .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: 170px; overflow: visible; }
+  .chart .tip { position: absolute; pointer-events: none; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 13px; box-shadow: 0 6px 18px rgba(0,0,0,.15); white-space: nowrap; transform: translate(50%, -100%); display: none; }
+  .chart-title { font-size: 14px; font-weight: 600; margin-top: 4px; }
+  .chart-empty { color: var(--muted); font-size: 14px; padding: 24px 0; text-align: center; }
+  dialog.about { max-width: 560px; width: calc(100% - 32px); border: 1px solid var(--line); border-radius: 14px; padding: 0; background: var(--card); color: var(--text); box-shadow: 0 20px 50px rgba(0,0,0,.3); }
+  dialog.about::backdrop { background: rgba(0,0,0,.45); }
+  dialog.about .in { padding: 22px 24px; }
+  dialog.about h2 { margin: 0 0 12px; font-size: 19px; }
+  dialog.about ul { margin: 0; padding-inline-start: 20px; display: grid; gap: 9px; font-size: 14.5px; color: var(--muted); }
+  dialog.about li b { color: var(--text); }
+  dialog.about .close { margin-top: 18px; display: flex; justify-content: flex-start; }
+  /* tabs */
+  nav.tabs { max-width: 1200px; margin: 0 auto; padding: 10px 16px 0; display: flex; gap: 6px; flex-wrap: wrap; }
+  .tab-btn { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 7px 16px; font-weight: 600; color: var(--muted); }
+  .tab-btn[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .badge { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; margin-inline-start: 4px; }
+  .tab-btn[aria-selected="true"] .badge { background: rgba(255,255,255,.25); color: #fff; }
+  .badge:empty { display: none; }
+  main { display: block; }
+  .tab { display: none; gap: 16px; }
+  .tab.active { display: grid; }
+  .cols { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .dash-split { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 16px; align-items: end; margin-top: 12px; }
+  .dash-split .tiles { grid-template-columns: 1fr; margin: 0; }
+  .tall { max-height: calc(100vh - 320px); min-height: 240px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .savebar { position: sticky; bottom: 0; margin-top: 16px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .savebar .hint { margin: 0; }
+  section.narrow { max-width: 720px; }
+  .steps { margin: 4px 0 14px; padding-inline-start: 22px; display: grid; gap: 4px; font-size: 14px; }
+  .filepath { margin-top: 6px; font: 12px Consolas, monospace; color: var(--muted); background: var(--bg); border-radius: 6px; padding: 6px 8px; text-align: right; word-break: break-all; }
+  input[type=url], input[type=time] { font: inherit; width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
+  @media (max-width: 820px) {
+    .cols, .dash-split, .pair { grid-template-columns: 1fr; }
+    .dash-split .tiles { grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>🎧 סוכן הדיג'יי</h1>
+    <span id="pill" class="pill stopped">כבוי</span>
+    <span id="detail" class="detail"></span>
+    <span class="stat">נשלחו לווצאפ: <b id="sent">0</b></span>
+    <div class="controls">
+      <button id="aboutBtn" class="small" title="הסבר על הבוט">ℹ מה הבוט עושה</button>
+      <label class="check" title="סורק ומציג בלוג, בלי לשלוח לווצאפ"><input type="checkbox" id="dry"> מצב בדיקה</label>
+      <button id="start" class="primary">▶ הפעל</button>
+      <button id="stop" class="danger">■ עצור</button>
+    </div>
+  </div>
+</header>
+
+<dialog class="about" id="about"><div class="in">
+  <h2>🎧 מה הבוט עושה</h2>
+  <ul>
+    <li><b>מחפש לקוחות בשבילך בפייסבוק:</b> גולל בפיד הראשי ובקבוצות שבחרת, וקורא כל פוסט.</li>
+    <li><b>מזהה מי מחפש דיג'יי:</b> "מחפש דיג'יי", "צריכים DJ לחתונה", "ממליצים על תקליטן" וכו'. מדלג על דיג'יים שמפרסמים את עצמם, על מי שמחפש קורס DJ ועל קנייה ומכירה של ציוד.</li>
+    <li><b>רק פוסטים חדשים:</b> שולח רק פוסטים מהימים האחרונים (לפי "כמה ימים אחורה" בהגדרות).</li>
+    <li><b>שולח לך לווצאפ:</b> כל פוסט מתאים מגיע אליך לצ'אט "אני" (או לקבוצת הווצאפ שבחרת), עם השם, הקבוצה, מתי עלה, הטקסט וקישור. אתה פונה לאנשים בעצמך.</li>
+    <li><b>מראה התקדמות:</b> עמוד X מתוך Y, זמן משוער לסיום הסבב לפי סבבים קודמים, וגרף של פוסטים מתאימים בכל סבב.</li>
+    <li><b>שעות פעילות:</b> עובד רק בשעות שהגדרת (למשל 08:00–00:00). סבב שהתחיל מסתיים, ואז הבוט מושהה עד הבוקר.</li>
+    <li><b>קבוצות חזקות קודם:</b> קבוצה שהביאה פוסט מתאים ב-30 הימים האחרונים נסרקת בכל סבב; קבוצה בלי פוסטים מתאימים – כל סבב שלישי.</li>
+    <li><b>התראות:</b> הודעה לווצאפ אם פייסבוק התנתק, או אם סבב נמשך הרבה יותר מהרגיל.</li>
+    <li><b>מעדכן בסוף כל סבב:</b> שולח לווצאפ "סיימתי את הסבב בשעה ..." כשהסבב נגמר.</li>
+    <li><b>פעם אחת בלבד:</b> פוסט שכבר נשלח אליך לא יישלח שוב.</li>
+    <li><b>סריקה חכמה בקבוצות:</b> הקבוצות נסרקות מהחדש לישן. הבוט זוכר את הפוסט האחרון שבדק בכל קבוצה, ובסבב הבא בודק רק מה שנוסף מאז.</li>
+    <li><b>רץ לבד:</b> סורק מחדש כל כמה דקות (לפי ההגדרות), כל עוד התוכנה פתוחה.</li>
+    <li><b>בטוח לחשבון:</b> בפייסבוק הבוט רק קורא. הוא לא מגיב, לא שולח הודעות ולא מפרסם כלום.</li>
+    <li><b>מצב בדיקה:</b> סורק ומציג בטרמינל מה היה נשלח, בלי לשלוח לווצאפ.</li>
+  </ul>
+  <div class="close"><button class="primary" id="aboutClose">סגור</button></div>
+</div></dialog>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="dash" class="tab-btn">📊 לוח בקרה</button>
+  <button role="tab" data-tab="groups" class="tab-btn">👥 קבוצות <span class="badge" id="tabGroups"></span></button>
+  <button role="tab" data-tab="settings" class="tab-btn">⚙ הגדרות</button>
+  <button role="tab" data-tab="review" class="tab-btn">🔍 סקירה <span class="badge" id="tabReview"></span></button>
+</nav>
+
+<main>
+  <!-- ===== Dashboard ===== -->
+  <div class="tab" data-tab="dash">
+    <section class="wide">
+      <h2>התקדמות</h2>
+      <div class="bar-track" role="progressbar" aria-label="התקדמות הסבב" aria-valuemin="0" id="progressTrack"><div class="bar-fill" id="progressFill"></div></div>
+      <div class="progress-text"><span id="progressText">הסוכן לא בסבב</span><span id="etaText"></span></div>
+      <div class="dash-split">
+        <div class="tiles">
+          <div class="tile"><div class="k">משך סבב ממוצע</div><div class="v" id="tileAvg">–</div></div>
+          <div class="tile"><div class="k">פוסטים מתאימים ב-7 ימים</div><div class="v" id="tileWeek">–</div></div>
+          <div class="tile"><div class="k">פוסטים שנבדקו בסבב האחרון</div><div class="v" id="tilePosts">–</div></div>
+        </div>
+        <div>
+          <div class="chart-title">פוסטים מתאימים בכל סבב</div>
+          <div class="chart" id="chart"><div class="chart-empty">הגרף יופיע אחרי הסבב הראשון</div></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="cols">
+      <section>
+        <h2>פוסטים שנשלחו אליך לאחרונה <button class="small" id="clearLeads">🗑 מחק את כל ההיסטוריה</button></h2>
+        <p class="hint">פוסט שנמחק מההיסטוריה עלול להישלח אליך שוב, אם הוא עדיין חדש.</p>
+        <div class="leads" id="leads"></div>
+      </section>
+
+      <section>
+        <h2>טרמינל
+          <span class="row"><label class="check"><input type="checkbox" id="follow" checked> גלילה אוטומטית</label>
+          <button class="small" id="clearLog" title="מנקה את כל השורות בטרמינל (הקובץ dj_agent.log נשמר)">🧹 איפוס הטרמינל</button></span>
+        </h2>
+        <div class="log" id="log"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ===== Groups ===== -->
+  <div class="tab" data-tab="groups">
+    <div class="cols">
+      <section>
+        <h2>קבוצות <span class="stat"><b id="groupsOn">0</b> מתוך <b id="groupsAll">0</b> פעילות</span></h2>
+        <div class="row">
+          <input type="search" id="groupFilter" placeholder="חיפוש קבוצה..." style="flex:1;min-width:140px">
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="small" id="allOn">הפעל את המוצגות</button>
+          <button class="small" id="allOff">כבה את המוצגות</button>
+          <button class="small" id="import" title="פותח את פייסבוק ומוסיף קבוצות חדשות שהצטרפת אליהן">⟳ ייבוא קבוצות מפייסבוק</button>
+        </div>
+        <div class="msg" id="groupsMsg"></div>
+        <div class="groups tall" id="groups"></div>
+      </section>
+
+      <section>
+        <h2>הפוסט האחרון שנשמר בכל קבוצה <button class="small" id="clearMarks">🗑 מחק הכל</button></h2>
+        <p class="hint">מכאן הבוט ממשיך בכל קבוצה: בסבב הבא הוא עוצר כשהוא מגיע לפוסט הזה. מחיקה = הקבוצה תיסרק שוב מההתחלה (עד "כמה ימים אחורה").</p>
+        <div class="marks tall" id="marks"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ===== Settings ===== -->
+  <div class="tab" data-tab="settings">
+    <form id="settings">
+      <div class="cols">
+        <section>
+          <h2>📱 ווצאפ – לאן לשלוח</h2>
+          <label class="field"><span>מספר הטלפון שלך</span><input type="text" name="phone" inputmode="tel" placeholder="0501234567"></label>
+          <label class="field"><span>שם קבוצת הווצאפ, בדיוק כמו בווצאפ (אם ממולא – הפוסטים נשלחים לקבוצה במקום לטלפון)</span><input type="text" name="group_name" placeholder="למשל: לידים לדיג'יי"></label>
+          <label class="field"><span>קישור הזמנה לקבוצה (רק אם עוד לא הצטרפת אליה)</span><input type="url" name="group_link" dir="ltr" placeholder="https://chat.whatsapp.com/..."></label>
+        </section>
+        <section>
+          <h2>🔎 סריקה</h2>
+          <div class="pair">
+            <label class="field"><span>כמה ימים אחורה</span><input type="number" name="max_post_age_days" min="1" step="1"></label>
+            <label class="field"><span>כל כמה דקות (מומלץ 20–30)</span><input type="number" name="run_every_minutes" min="0" step="1"></label>
+          </div>
+          <div class="pair">
+            <label class="field"><span>פועל מהשעה</span><input type="time" name="active_from"></label>
+            <label class="field"><span>עד השעה</span><input type="time" name="active_until"></label>
+          </div>
+          <div class="pair">
+            <label class="field"><span>גלילות בפיד הראשי (0 = בלי פיד)</span><input type="number" name="feed_scrolls" min="0" step="1"></label>
+            <label class="field"><span>מקסימום גלילות בקבוצה</span><input type="number" name="max_scrolls_per_group" min="1" step="1"></label>
+          </div>
+          <p class="hint">פוסט ישן מ"כמה ימים אחורה" לא נשלח. 0 דקות = סבב אחד בלבד.</p>
+        </section>
+      </div>
+      <div class="savebar"><button type="submit" class="primary" id="saveSettings" disabled>שמור הגדרות</button><span id="settingsMsg" class="msg"></span><span class="hint">נשמר מיד. אם הסוכן באמצע סבב – יחול מהסבב הבא.</span></div>
+    </form>
+  </div>
+
+  <!-- ===== Review ===== -->
+  <div class="tab" data-tab="review">
+    <section class="narrow">
+      <h2>קובץ החלטות לסקירה <button class="small" id="resetDecisions">🗑 אפס אחרי ששלחת</button></h2>
+      <p class="hint">כל פוסט שנשלח, פוסט שהבוט רצה לשלוח ודילג (ישן, בלי זמן, טקסט כפול), פוסט שנפסל, ופוסט שמזכיר דיג'יי או מוזיקה ולא זוהה כבקשה.</p>
+      <ol class="steps">
+        <li>פעם ביומיים שולחים את הקובץ לסקירה.</li>
+        <li>לוחצים <b>"🗑 אפס אחרי ששלחת"</b>.</li>
+        <li>מקבלים רשימת פוסטים שפוספסו (עם קישורים) ותיקונים לסינון.</li>
+      </ol>
+      <div class="progress-text"><span id="decisionsInfo">–</span></div>
+      <div class="filepath" dir="ltr" id="decisionsFile"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+let status = { state: 'stopped' };
+let groups = [];
+
+const STATES = {
+  stopped: ['כבוי', 'stopped'],
+  starting: ['מתחיל', 'busy'],
+  scanning: ['סורק', 'running'],
+  waiting: ['ממתין לסבב הבא', 'waiting'],
+  stopping: ['עוצר', 'busy'],
+  importing: ['מייבא קבוצות', 'busy'],
+};
+
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'שגיאה');
+  return data;
+}
+
+// ---------- status ----------
+function renderStatus() {
+  const [label, cls] = STATES[status.state] || [status.state, 'busy'];
+  $('pill').textContent = label + (status.dryRun && status.state !== 'stopped' ? ' (בדיקה)' : '');
+  $('pill').className = 'pill ' + cls;
+  $('sent').textContent = status.sent || 0;
+  const busy = status.state !== 'stopped';
+  $('start').disabled = busy;
+  $('stop').disabled = !busy || status.state === 'stopping' || status.state === 'importing';
+  $('import').disabled = busy;
+  $('dry').disabled = busy;
+  renderDetail();
+}
+function renderDetail() {
+  let text = status.detail || '';
+  if (status.state === 'waiting' && status.nextRoundAt) {
+    const left = Math.max(0, Math.round((status.nextRoundAt - Date.now()) / 1000));
+    text = left >= 3600
+      ? `${status.detail} (בעוד ${Math.floor(left / 3600)}:${String(Math.floor((left % 3600) / 60)).padStart(2, '0')} שע')`
+      : `סבב הבא בעוד ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+  }
+  $('detail').textContent = text;
+  renderProgress();
+}
+setInterval(renderDetail, 1000);
+
+// ---------- tabs (the last one is remembered) ----------
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-btn').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+  try { localStorage.setItem('tab', name); } catch {}
+  if (name === 'dash') renderRounds(); // the chart needs its real width
+}
+document.querySelectorAll('.tab-btn').forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+
+// ---------- decisions file ----------
+let decisions = null;
+function renderDecisions() {
+  if (!decisions) return;
+  const kb = Math.max(1, Math.round(decisions.bytes / 1024));
+  $('decisionsInfo').innerHTML = decisions.count
+    ? `<b>${decisions.count}</b> רשומות (${kb > 1024 ? (kb / 1024).toFixed(1) + ' MB' : kb + ' KB'}), הראשונה: ${esc(timeAgo(decisions.since))}`
+    : 'ריק – יתמלא בסבב הבא';
+  $('decisionsFile').textContent = decisions.file || '';
+  $('tabReview').textContent = decisions.count || '';
+}
+$('resetDecisions').onclick = async () => {
+  if (!confirm('לאפס את קובץ ההחלטות? (אחרי ששלחת אותו לסקירה)')) return;
+  ({ decisions } = await api('/api/decisions/reset', {}));
+  renderDecisions();
+};
+
+// ---------- progress & rounds chart ----------
+let rounds = [];
+const mins = (ms) => {
+  const m = Math.max(1, Math.round(ms / 60000));
+  return m < 60 ? `${m} דק'` : `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')} שע'`;
+};
+const clock = (t) => new Date(t).toTimeString().slice(0, 5);
+function renderProgress() {
+  const p = status.state === 'scanning' && status.progress;
+  $('progressFill').style.width = p ? `${Math.round((p.done / p.total) * 100)}%` : '0';
+  $('progressTrack').setAttribute('aria-valuenow', p ? p.done : 0);
+  $('progressTrack').setAttribute('aria-valuemax', p ? p.total : 0);
+  if (p) {
+    $('progressText').innerHTML = `עמוד <b>${p.done + 1}</b> מתוך <b>${p.total}</b>`;
+    $('etaText').innerHTML = status.etaAt
+      ? `סיום משוער: <b>${clock(status.etaAt)}</b> (עוד ${status.etaAt > Date.now() ? '~' + mins(status.etaAt - Date.now()) : 'רגע'})`
+      : 'זמן משוער יחושב אחרי הסבב הראשון';
+  } else {
+    $('progressText').textContent = status.state === 'waiting' ? (status.detail || 'הסבב הסתיים – ממתין לסבב הבא') : 'הסוכן לא בסבב';
+    $('etaText').textContent = '';
+  }
+}
+
+window.addEventListener('resize', () => renderRounds());
+function renderRounds() {
+  const done = rounds.filter((r) => r.duration_ms > 0);
+  const recent = done.slice(-10);
+  $('tileAvg').textContent = recent.length ? mins(recent.reduce((a, r) => a + r.duration_ms, 0) / recent.length) : '–';
+  const weekAgo = Date.now() - 7 * 864e5;
+  $('tileWeek').textContent = done.length ? done.filter((r) => !r.dry_run && Date.parse(r.finished_at) > weekAgo).reduce((a, r) => a + (r.leads || 0), 0) : '–';
+  $('tilePosts').textContent = done.length ? (done[done.length - 1].posts ?? '–') : '–';
+  const box = $('chart');
+  const data = done.slice(-20);
+  if (!data.length) { box.innerHTML = '<div class="chart-empty">הגרף יופיע אחרי הסבב הראשון</div>'; return; }
+  const W = Math.max(280, box.clientWidth || 560), H = 170, padL = 26, padB = 22, padT = 10;
+  const max = Math.max(1, ...data.map((r) => r.leads || 0));
+  const step = max <= 5 ? 1 : max <= 10 ? 2 : Math.ceil(max / 5);
+  const top = Math.ceil(max / step) * step;
+  const y = (v) => padT + (H - padT - padB) * (1 - v / top);
+  const band = (W - padL) / data.length;
+  const bw = Math.min(24, band * 0.6);
+  let svg = '';
+  for (let v = 0; v <= top; v += step) {
+    svg += `<line x1="${padL}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/>`;
+    svg += `<text x="${padL - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${v}</text>`;
+  }
+  // In an RTL page the newest round is drawn on the left (the end of the reading direction).
+  data.forEach((r, i) => {
+    const cx = W - band * (i + 0.5);
+    const v = r.leads || 0;
+    const h = Math.max(0, y(0) - y(v));
+    const x = cx - bw / 2, top0 = y(v), rr = Math.min(4, h);
+    const path = h > 0
+      ? `M${x},${y(0)} V${top0 + rr} Q${x},${top0} ${x + rr},${top0} H${x + bw - rr} Q${x + bw},${top0} ${x + bw},${top0 + rr} V${y(0)} Z`
+      : '';
+    if (path) svg += `<path d="${path}" fill="var(--chart)" ${r.dry_run ? 'fill-opacity=".45"' : ''}/>`;
+    svg += `<rect class="hit" data-i="${i}" x="${cx - band / 2}" y="${padT}" width="${band}" height="${H - padT - padB}" fill="transparent"/>`;
+  });
+  const first = new Date(data[0].finished_at), last = new Date(data[data.length - 1].finished_at);
+  const dm = (d) => `${d.getDate()}/${d.getMonth() + 1}`;
+  svg += `<text x="${W - band / 2}" y="${H - 4}" text-anchor="middle" font-size="11" fill="var(--muted)">${dm(first)}</text>`;
+  if (data.length > 1) svg += `<text x="${W - band * (data.length - 0.5)}" y="${H - 4}" text-anchor="middle" font-size="11" fill="var(--muted)">${dm(last)}</text>`;
+  svg += `<line x1="${padL}" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="var(--muted)" stroke-width="1"/>`;
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="פוסטים מתאימים בכל סבב">${svg}</svg><div class="tip" id="tip"></div>`;
+  const tip = $('tip');
+  box.querySelectorAll('.hit').forEach((el) => {
+    el.addEventListener('mouseenter', () => {
+      const r = data[+el.dataset.i];
+      const d = new Date(r.finished_at);
+      tip.innerHTML = `<b>${r.leads || 0} פוסטים מתאימים</b>${r.dry_run ? ' (בדיקה)' : ''}<br>${dm(d)} ${clock(d)} · ${mins(r.duration_ms)} · ${r.posts ?? 0} פוסטים נבדקו`;
+      const bb = el.getBoundingClientRect(), cb = box.getBoundingClientRect();
+      tip.style.display = 'block';
+      tip.style.right = `${cb.right - bb.left - bb.width / 2}px`;
+      tip.style.top = `${bb.top - cb.top + 6}px`;
+      el.setAttribute('fill', 'var(--grid)'); el.setAttribute('fill-opacity', '.5');
+    });
+    el.addEventListener('mouseleave', () => { tip.style.display = 'none'; el.setAttribute('fill', 'transparent'); });
+  });
+}
+
+$('start').onclick = async () => {
+  try { await api('/api/start', { dryRun: $('dry').checked }); } catch (e) { alert(e.message); }
+};
+$('stop').onclick = () => api('/api/stop', {}).catch((e) => alert(e.message));
+
+// ---------- settings ----------
+function fillSettings(s) {
+  for (const [k, v] of Object.entries(s)) if ($('settings').elements[k]) $('settings').elements[k].value = v;
+  $('saveSettings').disabled = false; // only once the real values are in the form
+}
+let msgTimers = {};
+function flash(id, text, ok) {
+  const el = $(id);
+  el.className = 'msg ' + (ok ? 'ok' : 'bad');
+  el.textContent = text;
+  clearTimeout(msgTimers[id]);
+  msgTimers[id] = setTimeout(() => (el.textContent = ''), ok ? 4000 : 8000);
+}
+$('settings').onsubmit = async (ev) => {
+  ev.preventDefault();
+  const values = Object.fromEntries(new FormData($('settings')));
+  try {
+    const { settings } = await api('/api/settings', values);
+    fillSettings(settings);
+    flash('settingsMsg', status.state === 'stopped' ? '✔ נשמר' : '✔ נשמר – יחול מהסבב הבא', true);
+  } catch (e) {
+    flash('settingsMsg', e.message, false);
+  }
+};
+
+// ---------- groups ----------
+function visibleGroups() {
+  const q = $('groupFilter').value.trim().toLowerCase();
+  return groups.filter((g) => !q || (g.name || g.id).toLowerCase().includes(q));
+}
+function renderGroups() {
+  $('groupsAll').textContent = groups.length;
+  $('groupsOn').textContent = groups.filter((g) => g.enabled).length;
+  $('tabGroups').textContent = `${groups.filter((g) => g.enabled).length}/${groups.length}`;
+  const list = visibleGroups();
+  if (!groups.length) {
+    $('groups').innerHTML = '<div class="empty">אין עדיין קבוצות. לחץ "ייבוא קבוצות מפייסבוק".</div>';
+    return;
+  }
+  $('groups').innerHTML = list.length
+    ? list.map((g) => `
+      <div class="group ${g.enabled ? '' : 'off'}">
+        <label class="switch" title="${g.enabled ? 'פעילה – לחץ לכיבוי' : 'כבויה – לחץ להפעלה'}">
+          <input type="checkbox" data-id="${esc(g.id)}" ${g.enabled ? 'checked' : ''}><span></span>
+        </label>
+        <span class="name" title="${esc(g.name || g.id)}">${esc(g.name || g.id)}</span>
+        <a href="${esc(g.url)}" target="_blank" rel="noopener" title="פתח בפייסבוק">↗</a>
+      </div>`).join('')
+    : '<div class="empty">אין קבוצות שמתאימות לחיפוש</div>';
+}
+async function saveGroups(changes) {
+  try {
+    ({ groups } = await api('/api/groups', { changes }));
+    renderGroups();
+    flash('groupsMsg', status.state === 'stopped' ? '✔ נשמר' : '✔ נשמר – יחול מהסבב הבא', true);
+  } catch (e) {
+    flash('groupsMsg', e.message, false);
+  }
+}
+$('groups').onchange = (ev) => {
+  if (ev.target.dataset.id) saveGroups({ [ev.target.dataset.id]: ev.target.checked });
+};
+$('groupFilter').oninput = renderGroups;
+$('allOn').onclick = () => saveGroups(Object.fromEntries(visibleGroups().map((g) => [g.id, true])));
+$('allOff').onclick = () => saveGroups(Object.fromEntries(visibleGroups().map((g) => [g.id, false])));
+$('import').onclick = () => api('/api/import-groups', {}).catch((e) => alert(e.message));
+
+// ---------- about popup ----------
+$('aboutBtn').onclick = () => $('about').showModal();
+$('aboutClose').onclick = () => $('about').close();
+$('about').onclick = (ev) => { if (ev.target === $('about')) $('about').close(); }; // click outside closes
+
+// ---------- log ----------
+function logClass(text) {
+  if (/✘|שגיאה|נכשל/.test(text)) return 'bad';
+  if (/⚠/.test(text)) return 'warn';
+  if (/🎯/.test(text)) return 'hit';
+  if (/✔|▶/.test(text)) return 'ok';
+  if (/⏭/.test(text)) return 'skip';
+  return '';
+}
+function addLog({ time, text }) {
+  const box = $('log');
+  const div = document.createElement('div');
+  div.className = logClass(text);
+  div.innerHTML = `<span class="t">${esc(time)}</span>${esc(text)}`;
+  box.appendChild(div);
+  while (box.children.length > 800) box.firstChild.remove();
+  if ($('follow').checked) box.scrollTop = box.scrollHeight;
+}
+
+// ---------- leads ----------
+function timeAgo(iso) {
+  const m = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (m < 60) return `לפני ${m} דק'`;
+  if (m < 1440) return `לפני ${Math.round(m / 60)} שעות`;
+  return new Date(iso).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+let leads = [];
+function renderLeads() {
+  $('leads').innerHTML = leads.length
+    ? leads.map((l) => `
+      <div class="lead">
+        <button class="xbtn" data-forget="${esc(l.postKey)}" title="מחק מההיסטוריה">✕</button>
+        <div class="who">${esc(l.authorName || 'לא ידוע')}</div>
+        <div class="meta">${l.groupName ? `בקבוצה ${esc(l.groupName)} · ` : ''}נשלח ${esc(timeAgo(l.createdAt))}</div>
+        <p>${esc(l.postText)}</p>
+        ${/^https?:/.test(l.postKey) ? `<a href="${esc(l.postKey)}" target="_blank" rel="noopener">פתח את הפוסט ↗</a>` : ''}
+      </div>`).join('')
+    : '<div class="empty">עוד לא נשלחו פוסטים</div>';
+}
+
+$('leads').onclick = async (ev) => {
+  const key = ev.target.dataset && ev.target.dataset.forget;
+  if (!key) return;
+  ({ leads } = await api('/api/leads/delete', { postKeys: [key] }));
+  renderLeads();
+};
+$('clearLeads').onclick = async () => {
+  if (!confirm('למחוק את כל היסטוריית השליחות?\nפוסטים שעדיין חדשים יישלחו אליך שוב.')) return;
+  ({ leads } = await api('/api/leads/delete', { all: true }));
+  renderLeads();
+};
+
+// ---------- bookmarks: the last post saved per group ----------
+let marks = [];
+function renderMarks() {
+  $('marks').innerHTML = marks.length
+    ? marks.map((m) => `
+      <div class="mark">
+        <span class="name" title="${esc(m.name)}">${esc(m.name)}</span>
+        <span class="when">${m.checked_at ? esc(timeAgo(m.checked_at)) : ''}</span>
+        ${/^https?:/.test(m.newest_post) ? `<a href="${esc(m.newest_post)}" target="_blank" rel="noopener">הפוסט ↗</a>` : ''}
+        <button class="xbtn" data-mark="${esc(m.id)}" title="מחק – הקבוצה תיסרק מההתחלה">✕</button>
+      </div>`).join('')
+    : '<div class="empty">עוד לא נשמרו פוסטים. הם נשמרים אחרי שהבוט סורק כל קבוצה.</div>';
+}
+$('marks').onclick = async (ev) => {
+  const id = ev.target.dataset && ev.target.dataset.mark;
+  if (!id) return;
+  ({ bookmarks: marks } = await api('/api/bookmarks/delete', { ids: [id] }));
+  renderMarks();
+};
+$('clearMarks').onclick = async () => {
+  if (!confirm('למחוק את כל הסימונים?\nבסבב הבא כל הקבוצות ייסרקו מההתחלה – זה ייקח יותר זמן.')) return;
+  ({ bookmarks: marks } = await api('/api/bookmarks/delete', { all: true }));
+  renderMarks();
+};
+
+// ---------- log ----------
+$('clearLog').onclick = () => api('/api/logs/clear', {});
+
+let savedTab = 'dash';
+try { savedTab = localStorage.getItem('tab') || 'dash'; } catch {}
+showTab(document.querySelector(`.tab[data-tab="${savedTab}"]`) ? savedTab : 'dash');
+
+// ---------- start ----------
+async function load() {
+  const s = await api('/api/state');
+  status = s.status;
+  groups = s.groups;
+  leads = s.leads;
+  marks = s.bookmarks;
+  rounds = s.rounds || []; renderRounds();
+  decisions = s.decisions; renderDecisions();
+  fillSettings(s.settings);
+  renderMarks();
+  renderStatus();
+  renderGroups();
+  renderLeads();
+  $('log').innerHTML = '';
+  s.logs.forEach(addLog);
+}
+
+load().catch(() => {});
+const live = new EventSource('/api/events');
+live.addEventListener('log', (e) => addLog(JSON.parse(e.data)));
+live.addEventListener('status', (e) => { status = JSON.parse(e.data); renderStatus(); });
+live.addEventListener('lead', (e) => { leads = [JSON.parse(e.data), ...leads].slice(0, 30); renderLeads(); });
+live.addEventListener('cleared', () => ($('log').innerHTML = ''));
+live.addEventListener('rounds', () => api('/api/state').then((s) => { rounds = s.rounds || []; renderRounds(); decisions = s.decisions; renderDecisions(); }));
+live.addEventListener('bookmarks', () => api('/api/state').then((s) => { marks = s.bookmarks; renderMarks(); }));
+live.addEventListener('groups', () => api('/api/state').then((s) => { groups = s.groups; renderGroups(); }));
+let connectedOnce = false;
+live.onopen = () => {
+  if (connectedOnce) load().catch(() => {}); // reconnected after the agent window restarted
+  connectedOnce = true;
+};
+</script>
+</body>
+</html>

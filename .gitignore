@@ -1,0 +1,10 @@
+node_modules/
+browser_profile/
+history.json
+rounds.json
+*.log
+groups.txt
+groups_last_seen.json
+panel_window/
+review_report.md
+decisions.jsonl
