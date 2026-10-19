@@ -16,7 +16,8 @@ const DJ_WORD = String.raw`(?:` +
   // תקליטן / תקליטנים / תקליטנית / תקליטניות
   String.raw`תקליטן|תקליטנית|תקליטנים|תקליטניות|` +
   // פעלים של תקלוט
-  String.raw`(?:ל|ש|מ|י|ת)?תקלט(?:ת|ו|ה|ים|ות)?(?![א-ת])|` +
+  // "לתקלט / שיתקלט" – not "מתקלט", which describes someone DJing ("איתן מתקלט")
+  String.raw`(?:ל|ש|שי|י|ת)?תקלט(?:ת|ו|ה|ים|ות)?(?![א-ת])|` +
   String.raw`תקלוט(?![א-ת])|` +
   // English: dj, djs, d.j., deejay, dee jay
   String.raw`(?<![a-z])(?:d\.?j\.?s?|dj's|dee[\s-]?jay?s?)(?![a-z])` +
@@ -34,14 +35,17 @@ const ASK = String.raw`(?:` +
   String.raw`אשמח|נשמח|` +
   // Not "ממליץ/ממליצה" (I recommend) or a bare "מכיר" (I know one): people offering use them.
   String.raw`ממליצים|ממליצות|תמליץ|תמליצי|תמליצו|להמליץ|המלצה|המלצות|מומלץ|מומלצת|מומלצים|מומלצות|` +
-  String.raw`מכירים|מכירות|מי\s+מכיר|מישהו\s+מכיר|מישהי\s+מכירה|` +
+  String.raw`מכירים|מכירות|מי\s+ש?מכיר|מישהו\s+ש?מכיר|מישהי\s+ש?מכירה|` +
+  // Asking about a DJ before booking: "מישהו לקח את X?", "מה אתם חושבים על הדיגיי X?"
+  String.raw`מישהו\s+ש?(?:לקח|סגר|עבד\s+עם)|מישהי\s+ש?(?:לקחה|סגרה|עבדה\s+עם)|` +
+  String.raw`מה\s+(?:אתם|את|אתן)\s+חושב(?:ים|ת|ות)?|מה\s+דעתכם|דעתכם|חוות\s+דעת|איך\s+(?:ידעתם|בחרתם|בחרת)|` +
+  String.raw`מה\s+(?:ה)?מחיר|מחיר\s+(?:הגיוני|סביר|ממוצע|מקובל)|` +
   String.raw`מישהו\s+יכול|מישהי\s+יכולה|מי\s+יכול|יכולים\s+להמליץ|מי\s+עושה|מישהו\s+עושה|מישהי\s+עושה|` +
   String.raw`אפשר\s+המלצה|אפשר\s+המלצות|יש\s+המלצה|יש\s+המלצות|` +
   String.raw`יש\s+למישהו|יש\s+למישהי|יש\s+לכם|יש\s+לך|` +
   // Not a bare "מחיר/מחירים": every ad has prices ("מחירים מעולים").
   String.raw`כמה\s+עולה|כמה\s+עולים|כמה\s+לוקח|כמה\s+גובה|` +
-  String.raw`הצעות\s+מחיר|הצעת\s+מחיר|עלויות|טווח\s+מחירים|` +
-  String.raw`looking\s+for|need|needs|needed|recommend|recommendation|recommendations|anyone\s+know|in\s+search\s+of` +
+  String.raw`הצעות\s+מחיר|הצעת\s+מחיר|עלויות|טווח\s+מחירים` +
   `)`;
 
 // Events people hire a DJ for.
@@ -51,8 +55,12 @@ const DEFAULT_INCLUDE = [
   // "מחפש/ת דיג'יי", "צריכים DJ לחתונה", "מי מכיר די ג'יי טוב?", "כמה עולה תקליטן?", ורשימות ספקים עם ירידות שורה
   // The gap may hold line breaks and list bullets, but not the end of a sentence (. ! ?).
   ASK + String.raw`[^.!?]{0,100}?` + DJ_WORD,
+  // "מחפשים מהמלצות בלבד! דיג'יי מצויין..." – the DJ right after a "!" or ":"
+  ASK + String.raw`[^.?\n]{0,30}?[!:]\s*(?:\S+\s+){0,2}?` + DJ_WORD,
+  // English, only right next to the DJ ("looking for a dj"): a bare "need" was in ads and job posts
+  String.raw`(?:looking\s+for|in\s+search\s+of|need|anyone\s+know|recommend(?:ation)?s?\s+(?:for|on))\s+(?:a\s+|an\s+|some\s+)?(?:good\s+|great\s+)?(?:dj|deejay)(?![a-z])`,
   // "דיג'יי מומלץ לחתונה", "תקליטן טוב מי מכיר" – in the same sentence
-  DJ_WORD + String.raw`[^\n.!?]{0,40}?` + ASK,
+  DJ_WORD + String.raw`[^\n.!?]{0,60}?(?:מומלץ|מומלצת|מומלצים|מומלצות|מי\s+ש?מכיר|מישהו\s+ש?מכיר|מכירים|ממליצים|ממליצות|ממליצה?\s*\?|המלצות?|דרוש|דרושה|דרושים)`,
   // "DJ לחתונה / לבר מצווה / לאירוע ... ?"
   DJ_WORD + String.raw`[\s\S]{0,40}?ל-?` + EVENT + String.raw`[\s\S]{0,80}\?`,
   // "חתונה בספטמבר, דיג'יי טוב באזור?"
@@ -100,22 +108,38 @@ const DEFAULT_EXCLUDE = [
 
   // Buying / selling equipment: "מחפש לקנות עמדת DJ", "מוכר ציוד DJ"
   // "אשמח להמלצות על עמדת אפטר לדיג'י" is someone looking for a DJ station, not for a DJ (owner's call).
-  String.raw`(?:לקנות|קונה|למכור|מוכר|מוכרת|עמדת|עמדה|ציוד|קונטרולר|controller|מיקסר)[\s\S]{0,20}?` + DJ_WORD,
+  String.raw`(?:לקנות|קונה|למכור|מוכר|מוכרת|קונטרולר|controller|מיקסר)[\s\S]{0,20}?` + DJ_WORD,
+  // "עמדת אפטר לדיג'י", "ציוד DJ" – but not "...שמגיעה עם כל הציוד. מחפשת דייגית"
+  String.raw`(?:עמדת|עמדה|ציוד)\s+(?:\S+\s+)?(?:ל|של\s+)?(?:ה)?` + DJ_WORD,
   DJ_WORD + String.raw`[\s\S]{0,20}?(?:למכירה|יד\s+2|יד\s+שנייה|במצב\s+מעולה)`,
 
   // Recommending or thanking a DJ after the event: "ממליצה בחום על הדיג'יי", "תודה לדיג'יי"
-  String.raw`(?:ממליץ|ממליצה|ממליצים|ממליצות)\s+בחום|(?<!(?:מי|מישהו|מישהי)\s)(?:רוצה|רציתי|רוצים|רצינו)\s+להמליץ|(?:רוצה|רציתי|רוצים|רצינו)\s+לפרגן|לפרגן\s+ל|תודה(?:\s+רבה)?\s+ל(?:ה)?` + DJ_WORD,
+  String.raw`(?:ממליץ|ממליצה|ממליצים|ממליצות)\s+בחום|(?<!(?:מי|מישהו|מישהי)\s)(?:רוצה|רציתי|רוצים|רצינו|חייבת|חייב|חייבים)\s+להמליץ|פוסט\s+המלצה|הבחירה\s+הכי\s+טובה\s+שלנו|(?:רוצה|רציתי|רוצים|רצינו)\s+לפרגן|לפרגן\s+ל|תודה(?:\s+רבה)?\s+ל(?:ה)?` + DJ_WORD,
   String.raw`אין\s+על\s+(?:ה)?` + DJ_WORD + String.raw`|הדיג\x27יי\s+שלנו\s+היה`,
 
   // Already have one: "את הדיג'יי כבר סגרנו", "יש לנו דיג'יי, מחפשים צלם"
   String.raw`(?:סגרנו|הזמנו|יש לנו|יש לי)\s+(?:כבר\s+)?(?:את\s+)?(?:ה)?` + DJ_WORD + String.raw`|(?:את\s+)?(?:ה)?` + DJ_WORD + String.raw`\s+(?:כבר\s+)?(?:סגרנו|סגור|הזמנו|יש)`,
 
   // Tips / marketing posts: "איך בוחרים דיג'יי לבת מצווה ולא מתחרטים? בקשו לראות סרטונים, בדקו המלצות..."
-  String.raw`איך\s+(?:בוחרים|לבחור|למצוא|מוצאים)|טיפים\s+ל|מדריך|לפני\s+(?:ש|שאתם\s+)סוגרים|(?:בקשו|בדקו|ודאו|תוודאו|אל תסתכלו)\s|חוגגים\s+פעם\s+אחת`,
+  // From the decisions file (14–19/10): hashtags and deals, portfolio ads, events with sign-up,
+  // a memorial call, and people looking for a venue who will bring their own DJ
+  String.raw`#[\u0590-\u05ffa-z0-9_]{3,}|עושים\s+לך|דיל\s+מטורף|תיק\s+(?:ה)?עבודות|ואתם\s+מרוויחים|לאור\s+הביקוש`,
+  String.raw`ההרשמה\s+נפתחה|לרכישת\s+כרטיסים|קול\s+קורא|ארכיון|כדאי\s+שנדבר|סגרתם\s+כבר`,
+  String.raw`להביא\s+(?:את\s+)?(?:ה)?` + DJ_WORD,
 
   // Looking for a song, not a DJ: "מחפשת את השיר שהדיג'יי שם"
   String.raw`מחפש(?:ת|ים)?\s+(?:את\s+)?(?:ה)?(?:שיר|רמיקס|סט|טראק|פלייליסט)`,
 ];
+
+// Tips and marketing ("איך בוחרים דיג'יי? בקשו לראות סרטונים..."). Not applied to a personal question
+// ("אשמח לקבל טיפים לבחירת די-ג'יי?", "איך בוחרים דייגי אם אין לנו מושג?"), which is a lead.
+const ADVICE_EXCLUDE = new RegExp(
+  String.raw`איך\s+(?:בוחרים|לבחור|למצוא|מוצאים)|טיפים\s+ל|מדריך|לפני\s+(?:ש|שאתם\s+)סוגרים|(?:בקשו|בדקו|ודאו|תוודאו|אל תסתכלו)\s|חוגגים\s+פעם\s+אחת`,
+  'i',
+);
+// Signs of someone asking for themselves. Not "נשמח" / "תודה": ads write "נשמח לעזור".
+const PERSONAL_WORDS = /אשמח|אודה|עזרה|מושג|מתלבט|(?<![א-ת])לנו(?![א-ת])/;
+const isAdvicePost = (t) => ADVICE_EXCLUDE.test(t) && !PERSONAL_WORDS.test(t);
 
 // Real fishing ("דייגים" is also a phone's autocorrect of "דיג'יים"). Only checked when "דייגים" is
 // the only DJ-like word, so "חתונה בכנרת, מחפשים דיג'יי" still passes.
@@ -136,6 +160,7 @@ function normalize(text) {
     .replace(/'+/g, "'")
     .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '')
     .replace(/[–—־]/g, '-')
+    .replace(/([\u05d0-\u05ea])\1{2,}/g, '$1$1') // "דיג'ייייי" -> "דיג'יי"
     .replace(/[ \t]+/g, ' ');
 }
 
@@ -175,7 +200,7 @@ class PostMatcher {
       return null;
     };
     const dj = first(this.include);
-    const excludedBy = first(this.exclude);
+    const excludedBy = first(this.exclude) || (isAdvicePost(t) ? (t.match(ADVICE_EXCLUDE) || [''])[0] : null);
     if (dj) {
       if (excludedBy) return { kind: 'excluded', phrase: dj, by: excludedBy };
       if (FISHING.test(t) && !this.djWord.test(t)) return { kind: 'excluded', phrase: dj, by: (t.match(FISHING) || [''])[0] };
@@ -187,7 +212,7 @@ class PostMatcher {
   /** Returns the matched phrase, or null if the post isn't a DJ request. */
   match(text) {
     const t = normalize(text);
-    if (this.exclude.some((rx) => rx.test(t))) return null;
+    if (this.exclude.some((rx) => rx.test(t)) || isAdvicePost(t)) return null;
     if (FISHING.test(t) && !this.djWord.test(t)) return null;
     for (const rx of this.include) {
       const m = t.match(rx);
