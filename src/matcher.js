@@ -141,6 +141,24 @@ const ADVICE_EXCLUDE = new RegExp(
 const PERSONAL_WORDS = /אשמח|אודה|עזרה|מושג|מתלבט|(?<![א-ת])לנו(?![א-ת])/;
 const isAdvicePost = (t) => ADVICE_EXCLUDE.test(t) && !PERSONAL_WORDS.test(t);
 
+// Asking about a specific DJ by name: they've found one, it's not a lead (the owner's call).
+// "המלצות על דיגי תומר טפירו?", "מה אתם חושבים על הדיגיי אילן מור?", "מכירים את עדן זגרון הדי-ג'יי",
+// "מישהו לקח את X בתור די גיי", "שסגרה עם דיג'י עומר", "על הדייג'ים הבאים:". Not "המלצות על דיג'יי
+// מטורף / שמרים / לחתונה / באזור / וצלם", where a description follows instead of a name.
+const DESCRIBE_WORDS = String.raw`טוב|טובה|טובים|מעולה|מעולים|מעולות|תותח|תותחית|תותחים|מטורף|מטורפת|מטורפים|מומלץ|מומלצת|מומלצים|מקצועי|מקצועית|איכותי|איכותית|חזק|חזקה|מצוין|מצויין|מצוינת|חדש|חדשה|אישה|בחורה|גבר|צעיר|צעירה|זול|זולה|אמיתי|אחד|אחר|אחרת|כזה|נוסף|עד|עם|או|לא|באזור|באיזור|ברמה|בצפון|בדרום|במרכז|בתקציב|במחיר|בסגנון|ביום|בערב|בשישי|בהתראה|אנרגטי|שמח|שמחה|מפעיל|מפעילה|חד`;
+// A word starting with ש / ל / ו / מ / כ ("שמרים", "לחתונה", "וצלם"), or one of the words above as a whole word
+const DESCRIBES = String.raw`(?:ש|ל|ו|מ|כ)[א-ת]|(?:` + DESCRIBE_WORDS + String.raw`)(?![א-ת])`;
+const SPECIFIC_DJ = new RegExp(
+  [
+    String.raw`(?:על|את|לגבי|עם|איך)\s+(?:ה)?` + DJ_WORD + String.raw`\s+(?!(?:` + DESCRIBES + String.raw`))[א-תa-z]`,
+    String.raw`(?:על|את)\s+[א-ת]+(?:\s+[א-ת]+){0,2}\s+ה` + DJ_WORD,
+    DJ_WORD + String.raw`\s+(?:ה)?זה(?![א-ת])|` + DJ_WORD + String.raw`\s+הבאים|הבאים\s*:|מהרשימה`,
+    String.raw`(?:לקח|לקחה|לקחו|לקחתם|לקחתן|סגר|סגרה|סגרו|סגרתם)\s+(?:את|עם)\s+(?!(?:ה)?` + DJ_WORD + String.raw`)[א-ת]`,
+    DJ_WORD + String.raw`\s+[א-ת]+(?:\s+[א-ת]+)?\s+(?:ניגן|ניגנה|תקלט|תקלטה)`,
+  ].join('|'),
+  'i',
+);
+
 // Real fishing ("דייגים" is also a phone's autocorrect of "דיג'יים"). Only checked when "דייגים" is
 // the only DJ-like word, so "חתונה בכנרת, מחפשים דיג'יי" still passes.
 const FISHING = /לדוג|דגים|חכה|חכות|פיתיון|פיתיונות|רשת\s+דייג|סירת\s+דייג|ציוד\s+דייג|סירה|לדיג|דיג\s/;
@@ -200,7 +218,10 @@ class PostMatcher {
       return null;
     };
     const dj = first(this.include);
-    const excludedBy = first(this.exclude) || (isAdvicePost(t) ? (t.match(ADVICE_EXCLUDE) || [''])[0] : null);
+    const excludedBy =
+      first(this.exclude) ||
+      (isAdvicePost(t) ? (t.match(ADVICE_EXCLUDE) || [''])[0] : null) ||
+      (t.match(SPECIFIC_DJ) || [null])[0];
     if (dj) {
       if (excludedBy) return { kind: 'excluded', phrase: dj, by: excludedBy };
       if (FISHING.test(t) && !this.djWord.test(t)) return { kind: 'excluded', phrase: dj, by: (t.match(FISHING) || [''])[0] };
@@ -212,7 +233,7 @@ class PostMatcher {
   /** Returns the matched phrase, or null if the post isn't a DJ request. */
   match(text) {
     const t = normalize(text);
-    if (this.exclude.some((rx) => rx.test(t)) || isAdvicePost(t)) return null;
+    if (this.exclude.some((rx) => rx.test(t)) || isAdvicePost(t) || SPECIFIC_DJ.test(t)) return null;
     if (FISHING.test(t) && !this.djWord.test(t)) return null;
     for (const rx of this.include) {
       const m = t.match(rx);
