@@ -138,7 +138,15 @@ class WhatsAppWeb {
     // Never send to the wrong chat: in group mode, the group must be the open chat.
     if (this.groupName && !(await this.inGroupChat())) throw new Error(`הקבוצה "${this.groupName}" לא פתוחה בווצאפ – ההודעה לא נשלחה`);
     await this.page.bringToFront();
-    await box.click();
+    // A WhatsApp popup can cover the box (the click timed out and the lead was lost): close it,
+    // reload the chat and try once more. Nothing was typed yet, so this can't send twice.
+    if (!(await box.click({ timeout: 10000 }).then(() => true, () => false))) {
+      await this.page.keyboard.press('Escape').catch(() => {});
+      await this.ensureReady();
+      if (this.groupName && !(await this.inGroupChat())) throw new Error(`הקבוצה "${this.groupName}" לא פתוחה בווצאפ – ההודעה לא נשלחה`);
+      box = this.page.locator(COMPOSE_BOX).first();
+      await box.click({ timeout: 15000 });
+    }
     await sleep(400);
     const lines = text.trim().split('\n');
     for (let i = 0; i < lines.length; i++) {

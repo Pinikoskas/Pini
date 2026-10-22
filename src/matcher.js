@@ -13,6 +13,8 @@ const DJ_WORD = String.raw`(?:` +
   String.raw`דיי[\s.-]?ג(?:יי|אי|י(?![םן]))(?:[וֹ]?ת|ם)?(?![א-ת])|` +
   // דג'י, דג'יי (חובה גרש כדי לא לתפוס דג/דגים)
   String.raw`דג'(?:יי|אי|י)(?:[וֹ]?ת|[יִ]?ם)?(?![א-ת])|` +
+  // ד'גיי (מקלדת ששמה גרש אחרי הד')
+  String.raw`ד'גי(?:י)?(?:[וֹ]?ת|ם)?(?![א-ת])|` +
   // תקליטן / תקליטנים / תקליטנית / תקליטניות
   String.raw`תקליטן|תקליטנית|תקליטנים|תקליטניות|` +
   // פעלים של תקלוט
@@ -54,7 +56,8 @@ const EVENT = String.raw`(?:חתונה|החתונה|מתחתן|מתחתנ(?:ים
 const DEFAULT_INCLUDE = [
   // "מחפש/ת דיג'יי", "צריכים DJ לחתונה", "מי מכיר די ג'יי טוב?", "כמה עולה תקליטן?", ורשימות ספקים עם ירידות שורה
   // The gap may hold line breaks and list bullets, but not the end of a sentence (. ! ?).
-  ASK + String.raw`[^.!?]{0,100}?` + DJ_WORD,
+  // Not "מהדיג'יי" (from the DJ): "נשמח להמלצות לנגן בוזוקי (לפי הדרישה מהדיג'יי)".
+  ASK + String.raw`[^.!?]{0,100}?(?<!מה)` + DJ_WORD,
   // "מחפשים מהמלצות בלבד! דיג'יי מצויין..." – the DJ right after a "!" or ":"
   ASK + String.raw`[^.?\n]{0,30}?[!:]\s*(?:\S+\s+){0,2}?` + DJ_WORD,
   // English, only right next to the DJ ("looking for a dj"): a bare "need" was in ads and job posts
@@ -108,7 +111,10 @@ const DEFAULT_EXCLUDE = [
 
   // Buying / selling equipment: "מחפש לקנות עמדת DJ", "מוכר ציוד DJ"
   // "אשמח להמלצות על עמדת אפטר לדיג'י" is someone looking for a DJ station, not for a DJ (owner's call).
-  String.raw`(?:לקנות|קונה|למכור|מוכר|מוכרת|קונטרולר|controller|מיקסר)[\s\S]{0,20}?` + DJ_WORD,
+  // Not "עם קונטרולר - לא דיגיי חתונות", which describes the DJ they want.
+  String.raw`(?:לקנות|קונה|למכור|מוכר|מוכרת|קונטרולר|controller|מיקסר)(?![\s\S]{0,5}?לא(?![א-ת]))[\s\S]{0,20}?` + DJ_WORD,
+  // DJ apps and gear: "Serato DJ זמין כעת", "אוזניות TMA-2 DJ"
+  String.raw`serato|סראטו|rekordbox|traktor|reloop|ddj-|אוזניות`,
   // "עמדת אפטר לדיג'י", "ציוד DJ" – but not "...שמגיעה עם כל הציוד. מחפשת דייגית"
   String.raw`(?:עמדת|עמדה|ציוד)\s+(?:\S+\s+)?(?:ל|של\s+)?(?:ה)?` + DJ_WORD,
   DJ_WORD + String.raw`[\s\S]{0,20}?(?:למכירה|יד\s+2|יד\s+שנייה|במצב\s+מעולה)`,
@@ -126,6 +132,8 @@ const DEFAULT_EXCLUDE = [
   String.raw`#[\u0590-\u05ffa-z0-9_]{3,}|עושים\s+לך|דיל\s+מטורף|תיק\s+(?:ה)?עבודות|ואתם\s+מרוויחים|לאור\s+הביקוש`,
   String.raw`ההרשמה\s+נפתחה|לרכישת\s+כרטיסים|קול\s+קורא|ארכיון|כדאי\s+שנדבר|סגרתם\s+כבר`,
   String.raw`להביא\s+(?:את\s+)?(?:ה)?` + DJ_WORD,
+  // From the decisions file (19–22/10): a DJ's ad "מי שמחפש דיגיי שיפנה לכאן", "לכל מי שחיפש דיג'יי"
+  String.raw`מי\s+ש(?:מחפש|מחפשת|מחפשים|חיפש|חיפשה|חיפשו|צריך|צריכה|צריכים)\s+(?:\S+\s+){0,2}?` + DJ_WORD,
 
   // Looking for a song, not a DJ: "מחפשת את השיר שהדיג'יי שם"
   String.raw`מחפש(?:ת|ים)?\s+(?:את\s+)?(?:ה)?(?:שיר|רמיקס|סט|טראק|פלייליסט)`,
@@ -155,6 +163,13 @@ const SPECIFIC_DJ = new RegExp(
     DJ_WORD + String.raw`\s+(?:ה)?זה(?![א-ת])|` + DJ_WORD + String.raw`\s+הבאים|הבאים\s*:|מהרשימה`,
     String.raw`(?:לקח|לקחה|לקחו|לקחתם|לקחתן|סגר|סגרה|סגרו|סגרתם)\s+(?:את|עם)\s+(?!(?:ה)?` + DJ_WORD + String.raw`)[א-ת]`,
     DJ_WORD + String.raw`\s+[א-ת]+(?:\s+[א-ת]+)?\s+(?:ניגן|ניגנה|תקלט|תקלטה)`,
+    // "שוקלים לסגור דיג'יי את עומר אוסדון"
+    DJ_WORD + String.raw`\s+את\s+(?!ה)[א-ת]`,
+    // "דייגי לחתונה, ניצן מאירי או יוני רז?" – two names; not "זמין היום או מחר בערב?"
+    DJ_WORD + String.raw`[^.?\n]{0,15}?(?<![א-ת])(?!(?:` + DESCRIBES + String.raw`|ב|ה))[א-ת]{2,}\s+[א-ת]{2,}\s+או\s+(?!(?:` + DESCRIBES + String.raw`|ב|ה))[א-ת]{2,}\s+[א-ת]{2,}\s*\?`,
+    String.raw`(?:באירועים|באירוע|בחתונות|בחתונה)\s+שלהם`,
+    // "מכירים דייגי אפוטה? איך הוא לחתונה"
+    DJ_WORD + String.raw`\s+(?!(?:` + DESCRIBES + String.raw`))[א-ת]+(?:\s+[א-ת]+)?\s*\?\s*(?:איך\s+(?:הוא|היא)|מה\s+(?:דעתכם|אומרים))`,
   ].join('|'),
   'i',
 );
