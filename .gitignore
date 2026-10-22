@@ -8,3 +8,4 @@ groups_last_seen.json
 panel_window/
 review_report.md
 decisions.jsonl
+bot_state.json

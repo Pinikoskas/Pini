@@ -628,6 +628,7 @@ const live = new EventSource('/api/events');
 live.addEventListener('log', (e) => addLog(JSON.parse(e.data)));
 live.addEventListener('status', (e) => { status = JSON.parse(e.data); renderStatus(); });
 live.addEventListener('lead', (e) => { leads = [JSON.parse(e.data), ...leads].slice(0, 30); renderLeads(); });
+live.addEventListener('closing', () => { live.close(); window.close(); });
 live.addEventListener('cleared', () => ($('log').innerHTML = ''));
 live.addEventListener('rounds', () => api('/api/state').then((s) => { rounds = s.rounds || []; renderRounds(); decisions = s.decisions; renderDecisions(); }));
 live.addEventListener('bookmarks', () => api('/api/state').then((s) => { marks = s.bookmarks; renderMarks(); }));

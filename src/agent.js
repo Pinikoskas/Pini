@@ -22,6 +22,7 @@ const { RoundStats } = require('./rounds');
 const { cleanPostText } = require('./postText');
 const { DecisionLog } = require('./decisions');
 const { inActiveHours, nextActiveTime, isDueThisRound, orderSources } = require('./schedule');
+const { readState, writeState, readUpdateNotes, startMessages, STOP_TEXT } = require('./botState');
 
 const POST_SELECTOR = '[role="article"], div[aria-posinset], div[data-pagelet^="FeedUnit"]';
 const OLD_POSTS_TO_STOP = 3;
@@ -268,8 +269,9 @@ class DJAgent {
   }
 
   /** Asks the agent to stop; it finishes the post it's on and exits within seconds. */
-  stop() {
+  stop(reason = 'user') {
     if (this.status.state === 'stopped') return;
+    this.stopReason = reason; // 'user' (the stop button), 'closed' (window closed), 'update'
     this.stopRequested = true;
     this.setStatus('stopping', 'עוצר...');
     if (this.wakeUp) this.wakeUp();
@@ -320,6 +322,9 @@ class DJAgent {
       throw e;
     }
     let browserClosed = false;
+    let failure = null;
+    this.announced = false;
+    this.stopReason = null;
     context.on('close', () => (browserClosed = true));
     const page = context.pages()[0] || (await context.newPage());
     try {
@@ -338,6 +343,7 @@ class DJAgent {
         log('הודעת בדיקה נשלחה לווצאפ ✔');
         return;
       }
+      if (!this.dryRun) await this.announceStart();
       await page.bringToFront();
       this.setStatus('starting', 'מתחבר לפייסבוק');
       await this.ensureLoggedIn(page);
@@ -453,14 +459,44 @@ class DJAgent {
         if (this.stopRequested) break;
       }
     } catch (e) {
-      if (!browserClosed && !page.isClosed()) throw e;
+      if (!browserClosed && !page.isClosed()) {
+        failure = e;
+        throw e;
+      }
       log('חלון הדפדפן נסגר – הסוכן נעצר.');
     } finally {
+      if (this.announced) await this.announceStop(browserClosed || page.isClosed() ? null : failure);
       log(`סיום. נשלחו לווצאפ: ${this.notificationsSent}`);
       await context.close().catch(() => {});
       this.stopRequested = false;
       this.setStatus('stopped');
     }
+  }
+
+  /**
+   * "הבוט הופעל" to WhatsApp, or after an update "הבוט חזר מעדכון" with what changed and the
+   * missed posts found in the review of the decisions file (UPDATE_NOTES.json), sent once.
+   */
+  async announceStart() {
+    const state = readState(this.cfg.state_file);
+    const notes = readUpdateNotes(this.cfg.update_notes_file);
+    try {
+      for (const text of startMessages(state, notes)) await this.notify(text);
+      if (notes) state.update_id = notes.id;
+    } catch (e) {
+      log(`✘ הודעת ההפעלה לווצאפ נכשלה: ${e.message.split('\n')[0]}`);
+    }
+    writeState(this.cfg.state_file, { ...state, running: true, stop_reason: null });
+    this.announced = true;
+  }
+
+  /** "הבוט נעצר" / "נעצר לצורך עדכון" / "נעצר בגלל שגיאה" to WhatsApp (when WhatsApp is still open). */
+  async announceStop(failure) {
+    const reason = failure ? 'error' : this.stopReason || 'closed';
+    writeState(this.cfg.state_file, { ...readState(this.cfg.state_file), running: false, stop_reason: reason });
+    if (!this.wa || !this.wa.page || this.wa.page.isClosed()) return; // the browser was closed
+    const text = failure ? `⚠️ הבוט נעצר בגלל שגיאה: ${failure.message.split('\n')[0]}` : STOP_TEXT[reason];
+    await this.notify(text).catch((e) => log(`✘ הודעת העצירה לווצאפ נכשלה: ${e.message.split('\n')[0]}`));
   }
 
   /** "סיימתי את הסבב בשעה 14:05" to WhatsApp after every full round. */

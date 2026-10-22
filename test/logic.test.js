@@ -660,3 +660,16 @@ test('decisions file 19–22/10: real posts', () => {
     assert.ok(!send(t), t);
   }
 });
+
+test('start messages: plain start, back from an update (sent once), after a crash', () => {
+  const { startMessages } = require('../src/botState');
+  const notes = { id: 'u1', changes: ['שינוי א'], missed_posts: [{ group: 'קבוצה', url: 'https://x/1', text: 'מחפש דיגיי' }] };
+  assert.deepEqual(startMessages({}, null), ['▶️ הבוט הופעל']);
+  const msgs = startMessages({ update_id: 'u0' }, notes);
+  assert.equal(msgs.length, 2);
+  assert.match(msgs[0], /חזר מעדכון[\s\S]*• שינוי א[\s\S]*פוספסו/);
+  assert.equal(msgs[1], '📌 פוסט שפוספס – קבוצה\nמחפש דיגיי\nhttps://x/1');
+  assert.deepEqual(startMessages({ update_id: 'u1' }, notes), ['▶️ הבוט הופעל']); // already sent
+  assert.match(startMessages({ update_id: 'u1', stop_reason: 'update' }, notes)[0], /^✅ הבוט חזר מעדכון/);
+  assert.match(startMessages({ running: true }, null)[0], /נסגר בלי עצירה רגילה/);
+});

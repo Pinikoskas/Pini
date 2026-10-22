@@ -53,6 +53,8 @@ function loadConfig(file) {
   cfg.groups_last_seen_file = path.resolve(base, cfg.groups_last_seen_file || './groups_last_seen.json');
   cfg.rounds_file = path.resolve(base, cfg.rounds_file || './rounds.json');
   cfg.decisions_file = path.resolve(base, cfg.decisions_file || './decisions.jsonl');
+  cfg.state_file = path.resolve(base, './bot_state.json');
+  cfg.update_notes_file = path.resolve(base, './UPDATE_NOTES.json');
   return cfg;
 }
 

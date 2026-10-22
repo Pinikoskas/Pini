@@ -72,6 +72,18 @@ function startPanel({ configPath, port }) {
       return { ok: true };
     },
 
+    // The update commands call this first: the bot says on WhatsApp that it stopped for an update.
+    'POST /api/stop-for-update': async () => {
+      log('🔄 נעצר לצורך עדכון...');
+      if (bot && bot.status.state !== 'stopped') {
+        bot.stop('update');
+        for (let i = 0; i < 240 && bot.status.state !== 'stopped'; i++) await new Promise((r) => setTimeout(r, 500));
+      }
+      events.emit('closing');
+      setTimeout(() => process.exit(0), 1000);
+      return { ok: true };
+    },
+
     'POST /api/settings': (body) => {
       const saved = updateConfigValues(configPath, body);
       log(`⚙ ההגדרות נשמרו${running() ? ' – יחולו מהסבב הבא' : ''}`);
@@ -166,7 +178,7 @@ function startPanel({ configPath, port }) {
     clearTimeout(quitTimer);
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
     const send = (type) => (data) => res.write(`event: ${type}\ndata: ${JSON.stringify(data ?? {})}\n\n`);
-    const handlers = { log: send('log'), status: send('status'), lead: send('lead'), groups: send('groups'), cleared: send('cleared'), bookmarks: send('bookmarks'), rounds: send('rounds') };
+    const handlers = { closing: send('closing'), log: send('log'), status: send('status'), lead: send('lead'), groups: send('groups'), cleared: send('cleared'), bookmarks: send('bookmarks'), rounds: send('rounds') };
     for (const [type, fn] of Object.entries(handlers)) events.on(type, fn);
     const ping = setInterval(() => res.write(': ping\n\n'), 25000);
     req.on('close', () => {
@@ -180,8 +192,8 @@ function startPanel({ configPath, port }) {
   async function shutdown() {
     if (bot && bot.status.state !== 'stopped') {
       log('סוגר – עוצר את הסוכן...');
-      bot.stop();
-      for (let i = 0; i < 40 && bot.status.state !== 'stopped'; i++) await new Promise((r) => setTimeout(r, 500));
+      bot.stop('closed');
+      for (let i = 0; i < 60 && bot.status.state !== 'stopped'; i++) await new Promise((r) => setTimeout(r, 500));
     }
     process.exit(0);
   }
